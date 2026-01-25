@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/expense_tracker.dir/link.d CMakeFiles/expense_tracker.dir/src/main.cpp.o CMakeFiles/expense_tracker.dir/src/domain/Purchase.cpp.o -o expense_tracker
