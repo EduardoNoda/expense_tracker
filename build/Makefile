@@ -129,30 +129,6 @@ expense_tracker/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/expense_tracker.dir/build.make CMakeFiles/expense_tracker.dir/build
 .PHONY : expense_tracker/fast
 
-src/domain/Purchase.o: src/domain/Purchase.cpp.o
-.PHONY : src/domain/Purchase.o
-
-# target to build an object file
-src/domain/Purchase.cpp.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/expense_tracker.dir/build.make CMakeFiles/expense_tracker.dir/src/domain/Purchase.cpp.o
-.PHONY : src/domain/Purchase.cpp.o
-
-src/domain/Purchase.i: src/domain/Purchase.cpp.i
-.PHONY : src/domain/Purchase.i
-
-# target to preprocess a source file
-src/domain/Purchase.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/expense_tracker.dir/build.make CMakeFiles/expense_tracker.dir/src/domain/Purchase.cpp.i
-.PHONY : src/domain/Purchase.cpp.i
-
-src/domain/Purchase.s: src/domain/Purchase.cpp.s
-.PHONY : src/domain/Purchase.s
-
-# target to generate assembly for a file
-src/domain/Purchase.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/expense_tracker.dir/build.make CMakeFiles/expense_tracker.dir/src/domain/Purchase.cpp.s
-.PHONY : src/domain/Purchase.cpp.s
-
 src/main.o: src/main.cpp.o
 .PHONY : src/main.o
 
@@ -186,9 +162,6 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... expense_tracker"
-	@echo "... src/domain/Purchase.o"
-	@echo "... src/domain/Purchase.i"
-	@echo "... src/domain/Purchase.s"
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"

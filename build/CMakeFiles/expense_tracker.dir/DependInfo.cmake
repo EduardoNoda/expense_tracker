@@ -8,7 +8,6 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/eduardo-noda/Projetos/CodeProjects/ExpenseTracker/src/domain/Purchase.cpp" "CMakeFiles/expense_tracker.dir/src/domain/Purchase.cpp.o" "gcc" "CMakeFiles/expense_tracker.dir/src/domain/Purchase.cpp.o.d"
   "/home/eduardo-noda/Projetos/CodeProjects/ExpenseTracker/src/main.cpp" "CMakeFiles/expense_tracker.dir/src/main.cpp.o" "gcc" "CMakeFiles/expense_tracker.dir/src/main.cpp.o.d"
   "" "expense_tracker" "gcc" "CMakeFiles/expense_tracker.dir/link.d"
   )
