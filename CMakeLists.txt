@@ -11,7 +11,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(expense_tracker
 	src/main.cpp
-	src/domain/Purchase.cpp
 )
 
 target_include_directories(expense_tracker
