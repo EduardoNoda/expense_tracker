@@ -1,3 +1,0 @@
-/home/eduardo-noda/Projetos/CodeProjects/ExpenseTracker/build/CMakeFiles/expense_tracker.dir
-/home/eduardo-noda/Projetos/CodeProjects/ExpenseTracker/build/CMakeFiles/edit_cache.dir
-/home/eduardo-noda/Projetos/CodeProjects/ExpenseTracker/build/CMakeFiles/rebuild_cache.dir
