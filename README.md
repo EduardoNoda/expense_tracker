@@ -1,6 +1,6 @@
 # Visão Geral
 
-Sistema local para registro, classificação e análise de gastos pessoais a partir de **QR codes de notas fiscais** e **inserções manuais**, com **SQLite como fonte da verdade** e **relatórios em Excel (.xlsx)** como camada de visualização inicial.
+Sistema local para registro, classificação e análise de gastos pessoais a partir de **QR codes de notas fiscais**, **documentos fiscais digitais (ex: PDF)** e **inserções manuais**, com **SQLite como fonte da verdade** e **relatórios em Excel (.xlsx)** como camada de visualização inicial.
 
 O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**, não dependência de UI ou linguagem específica.
 
@@ -63,7 +63,19 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
     - Informada manualmente ou
         
     - Data atual, por escolha do usuário
-        
+
+### 3. Documento Fiscal Digital (PDF / HTML)
+
+- Origem assistida (não automatizada no MVP)
+- Documento serve como referência confiável de dados
+- Extração de informações é realizada manualmente pelo usuário
+- Pode conter:
+    - Identificadores fiscais (número da nota, código de verificação, município emissor)
+    - Dados sensíveis do tomador
+- O sistema pode registrar metadados do documento para rastreabilidade
+
+> A importação automática de documentos fiscais **não faz parte do MVP** e é considerada uma evolução futura.
+
 
 ---
 
@@ -103,7 +115,7 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
         
     - Corrigir erros
          
-    - Estado anterior à alteração do usuário permance salva
+    - Estado original (automático) e estado corrigido pelo usuário são ambos persistidos para fins de auditoria e análise futura
         
 
 > Alterações feitas pelo usuário afetam os dados persistidos e, consequentemente, os relatórios futuros.
@@ -130,6 +142,8 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 - Classificações
     
 - Datas (data da compra e data de inserção)
+
+- Identificadores fiscais (quando disponíveis), como número da nota e código de verificação
     
 
 > Invariantes mais rígidas serão definidas após validação do domínio real (QR code).
@@ -210,6 +224,8 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
     - Criptografia local
         
     - Proteção por usuário
+
+- Documentos fiscais podem conter dados pessoais identificáveis (ex: CPF, nome)
         
 >A ausência de criptografia no MVP é uma decisão consciente para reduzir complexidade inicial, dado o caráter local e offline do sistema.
 
@@ -222,6 +238,9 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 - Análise dos dados retornados
     
 - Validação das suposições atuais
+
+- Documentos fiscais digitais (ex: NFS-e em PDF) apresentam estrutura rica de dados,
+  porém não são projetados para consumo automatizado direto
 
 > Caso não exista identificador único confiável, o sistema **não garante deduplicação automática**.  
   Cabe ao usuário decidir se uma compra duplicada deve ser mantida ou removida.
