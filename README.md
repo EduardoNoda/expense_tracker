@@ -1,6 +1,6 @@
 # Visão Geral
 
-Sistema local para registro, classificação e análise de gastos pessoais a partir de **QR codes de notas fiscais**, **documentos fiscais digitais (ex: PDF)** e **inserções manuais**, com **SQLite como fonte da verdade** e **relatórios em Excel (.xlsx)** como camada de visualização inicial.
+Sistema local para registro, classificação e análise de gastos pessoais a partir de fontes reais, incluindo **QR-codes**, **documentos fiscais digitais (ex: NFC-e, NF-e e PDF)** e **inserções manuais**, com **SQLite como fonte da verdade** e **relatórios em Excel (.xlsx)** como camada de visualização inicial.
 
 O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**, não dependência de UI ou linguagem específica.
 
@@ -8,7 +8,7 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 
 # Objetivos
 
-- Registrar compras a partir de QR codes e inserções manuais
+- Registrar compras a partir de fontes fiscais reais (QR codes, documentos digitais e inserções manuais)
     
 - Classificar gastos automaticamente (com possibilidade de edição pelo usuário)
     
@@ -27,26 +27,20 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 
 ### 1. QR Code
 
-- Origem automática
-    
-- Pode retornar:
-    
-    - Compra detalhada (produtos, valores unitários, totais)
-        
-    - Compra resumida (apenas local, data e valor total)
-        
-- Dados esperados (a confirmar em _Descobertas de Campo_):
-    
-    - Data da compra
-        
-    - Local
-        
-    - Itens (quando disponíveis)
-        
-    - Valor total
-        
+- Origem assistida
+- Utilizado como meio de acesso a documentos fiscais oficiais
+- Redireciona, em geral, para portais governamentais (ex: SEFAZ), podendo exigir validações adicionais (captcha)
+- Pode resultar na visualização da nota fiscal em HTML ou no download de documento digital (ex: PDF)
 
->  O comportamento exato do QR code depende do emissor da nota fiscal. Este projeto assume **variabilidade de retorno**.
+Dados obtidos indiretamente a partir do documento fiscal acessado:
+- Data da compra
+- Local / emissor
+- Itens (quando disponíveis)
+- Valor total
+- Identificadores fiscais (quando presentes)
+
+> QR codes fiscais **não fornecem dados estruturados diretamente ao sistema**.
+> Eles atuam como ponte para obtenção de documentos fiscais confiáveis, cujo conteúdo é interpretado pelo usuário no MVP.
 
 ### 2. Inserção Manual
 
@@ -75,7 +69,7 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 - O sistema pode registrar metadados do documento para rastreabilidade
 
 > A importação automática de documentos fiscais **não faz parte do MVP** e é considerada uma evolução futura.
-
+> Documentos fiscais digitais representam atualmente a fonte mais confiável de dados detalhados no domínio do projeto.
 
 ---
 
@@ -233,7 +227,7 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 
 # Descobertas de Campo (A Fazer)
 
-- Escaneamento real de QR codes
+- Escaneamento real de QR codes e análise do fluxo governamental (redirecionamento, captcha, acesso à NFC-e)
     
 - Análise dos dados retornados
     
@@ -241,6 +235,8 @@ O projeto prioriza **engenharia, modelagem de domínio e decisões explícitas**
 
 - Documentos fiscais digitais (ex: NFS-e em PDF) apresentam estrutura rica de dados,
   porém não são projetados para consumo automatizado direto
+  
+- QR codes fiscais atuam como identificadores de acesso, não como interfaces de ingestão automática
 
 > Caso não exista identificador único confiável, o sistema **não garante deduplicação automática**.  
   Cabe ao usuário decidir se uma compra duplicada deve ser mantida ou removida.
