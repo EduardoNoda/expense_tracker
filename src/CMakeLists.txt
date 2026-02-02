@@ -1,7 +1,6 @@
 add_library(expense_domain
-    Date.cpp
-    MoneyManager.cpp
-    DefaulCategories.cpp
+    domain/Date.cpp
+    domain/MoneyManager.cpp
 )
 
 target_include_directories(expense_domain
