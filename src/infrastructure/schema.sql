@@ -13,7 +13,6 @@ CREATE TABLE payment_methods (
 CREATE TABLE incomes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-    description TEXT,
     date TEXT NOT NULL, -- ISO 8601
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -21,7 +20,6 @@ CREATE TABLE incomes (
 CREATE TABLE expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-    description TEXT,
     date TEXT NOT NULL, -- ISO 8601
     category_id INTEGER NOT NULL,
     payment_method_id INTEGER NOT NULL,
