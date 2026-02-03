@@ -3,11 +3,11 @@
 #include <iostream>
 #include <string>
 
-class monataryValue {
+class Money {
     long long valueInCents;
 public:
-    monataryValue();
-    monataryValue(long long value);
+    Money();
+    Money(long long value);
 
     std::string toString() const;
 };
