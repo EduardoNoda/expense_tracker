@@ -13,8 +13,6 @@ int Date::getMonth() const {return month;}
 
 int Date::getYear() const {return year;}
 
-// TODO: 1 - garantir meses 1-12; 2 - garantir dias corretos para cada mes; 3 - tratar ano bissexto. 
-// bool isLeapYear = (Date::getYear % 4 == 0 && Date::getYear % 100 != 0) || (Date::getYear % 400 == 0);
 std::string Date::toString () const {
     std::stringstream dateFormatted;
     dateFormatted << std::setw(2) << std::setfill('0') << day << "/" 
