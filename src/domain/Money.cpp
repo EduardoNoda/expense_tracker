@@ -3,8 +3,24 @@
 #include <iomanip>
 #include <sstream>
 
-Money::Money() : valueInCents(0) {}
-Money::Money(long long value) : valueInCents(value) {}
+Money::Money(long long cents) 
+    : valueInCents(cents) {}
+
+Money Money::operator+(const Money& other) const {
+    return Money(valueInCents + other.valueInCents);
+}
+
+Money Money::operator-(const Money& other) const {
+    return Money(valueInCents - other.valueInCents);
+}
+
+bool Money::operator<(const Money& other) const{
+    return valueInCents < other.valueInCents;
+}
+
+bool Money::operator==(const Money& other) const{
+    return valueInCents == other.valueInCents;
+}
 
 std::string Money::toString() const {
     long long reais = valueInCents / 100;

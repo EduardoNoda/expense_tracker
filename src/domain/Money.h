@@ -4,10 +4,16 @@
 #include <string>
 
 class Money {
-    long long valueInCents;
 public:
-    Money();
-    Money(long long value);
+    Money(long long cents = 0);
+
+    Money operator+(const Money& other) const;
+    Money operator-(const Money& other) const;
+
+    bool operator==(const Money& other) const;
+    bool operator<(const Money& other) const;
 
     std::string toString() const;
+private:
+    long long valueInCents;
 };
