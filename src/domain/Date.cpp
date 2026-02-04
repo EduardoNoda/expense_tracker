@@ -40,9 +40,11 @@ void validateDate (int getDay, int getMonth, int getYear) {
             throw std::invalid_argument("Invalid Month\n");
     }
 
-    if (getDay < 1 || getDay > daysInMonth) {
+    if (getDay < 1 || getDay > daysInMonth) 
         throw std::invalid_argument("Invalid Day\n");
-    }
+    
+    if (getYear < 1900 || getYear > 3000)
+        throw std::invalid_argument("Invalid Year");
 }
 
 bool Date::operator<(const Date& other) const {
@@ -54,6 +56,14 @@ bool Date::operator<(const Date& other) const {
 bool Date::operator==(const Date& other) const {
     if (day != other.day || month != other.month || year != other.year) return false;
     return true;
+}
+
+std::string Date::toISO() const {
+    std::stringstream ss;
+    ss << year << "-"
+       << std::setw(2) << std::setfill('0') << month << "-"
+       << std::setw(2) << std::setfill('0') << day;
+    return ss.str();
 }
 
 Date::Date(int d, int m, int y) {

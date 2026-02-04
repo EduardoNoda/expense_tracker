@@ -15,6 +15,9 @@ public:
     bool operator==(const Date& other) const;
     bool operator<(const Date& other) const;
     
+    std::string toISO() const;
+    static Date fromISO(const std::string& iso);
+
 private:
     int day, month, year;
 };
