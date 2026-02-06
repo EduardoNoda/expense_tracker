@@ -6,6 +6,10 @@
 Money::Money(long long cents) 
     : valueInCents(cents) {}
 
+long long Money::getCents() const {
+    return valueInCents;
+}
+
 Money Money::operator+(const Money& other) const {
     return Money(valueInCents + other.valueInCents);
 }

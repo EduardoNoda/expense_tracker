@@ -7,6 +7,8 @@ class Money {
 public:
     Money(long long cents = 0);
 
+    long long getCents() const;
+
     Money operator+(const Money& other) const;
     Money operator-(const Money& other) const;
 
