@@ -10,6 +10,7 @@ public:
 
     int save(const Revenue& revenue) override;
     std::vector<Revenue> findByMonth(int month, int year) override;
+    Revenue findById(int revenueId) override;
 private:
     Database& database;
 };

@@ -42,8 +42,35 @@ std::vector<Revenue> SQLiteRevenueRepository::findByMonth(int month, int year) {
         long long amountCents = sqlite3_column_int64(stmt, 1);
         std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
 
-        revenues.emplace_back(id, Money(amountCents), Date::fromISO(dateISO));
+        Revenue revenue(Money(amountCents), Date::fromISO(dateISO));
+        revenue.setId(id);
+        revenues.push_back(revenue);
     }
     sqlite3_finalize(stmt);
     return revenues;
+}
+
+Revenue SQLiteRevenueRepository::findById(int revenueId) {
+    const char* sql = "SELECT id, amount_cents, date "
+                    "FROM revenues "
+                    "WHERE id = ?";
+    
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
+    sqlite3_bind_int(stmt, 1, revenueId);
+
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        throw std::runtime_error("Revenue not found");
+    }
+
+    int id = sqlite3_column_int(stmt, 0);
+    long long amountCents = sqlite3_column_int64(stmt, 1);
+    std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+
+    Revenue revenue(Money(amountCents), Date::fromISO(dateISO));
+    revenue.setId(id);
+    
+    sqlite3_finalize(stmt);
+    return revenue;
 }
