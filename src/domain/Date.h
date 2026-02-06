@@ -17,6 +17,7 @@ public:
     
     std::string toISO() const;
     static Date fromISO(const std::string& iso);
+    static Date firstDayOfNextMonth(int month, int year);
 
 private:
     int day, month, year;

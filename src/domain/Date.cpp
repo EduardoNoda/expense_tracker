@@ -65,6 +65,28 @@ std::string Date::toISO() const {
        << std::setw(2) << std::setfill('0') << day;
     return ss.str();
 }
+Date Date::fromISO(const std::string& iso) {
+    if (iso.size() != 10 || iso[4] != '-' || iso[7] != '-') {
+        throw std::invalid_argument("Invalid ISO date format");
+    }
+
+    int year  = std::stoi(iso.substr(0, 4));
+    int month = std::stoi(iso.substr(5, 2));
+    int day   = std::stoi(iso.substr(8, 2));
+
+    return Date(day, month, year);
+}
+
+Date Date::firstDayOfNextMonth(int month, int year){
+    month++;
+
+    if(month > 12) {
+        month = 1;
+        year++;
+    }
+
+    return Date(1, month, year);
+}
 
 Date::Date(int d, int m, int y) {
     validateDate(d, m, y);
