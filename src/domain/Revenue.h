@@ -7,9 +7,10 @@
 
 class Revenue {
 public:
-    Revenue (int id, Money amaout, Date date);
+    Revenue (Money amaout, Date date);
 
     int getId() const;
+    void setId(int id);
     const Money& getAmount() const;
     const Date& getDate() const;
 

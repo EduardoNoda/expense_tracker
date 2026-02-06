@@ -3,12 +3,15 @@
 #include "Money.h"
 #include <stdexcept>
 
-Revenue::Revenue(int id, Money amount, Date date) 
-    : id(id), amount(amount), date(date){
-    if(id <= 0){
-        throw new std::invalid_argument("Id precisa ser positivo");
-    }
+Revenue::Revenue(Money amount, Date date) 
+    : id(0), amount(amount), date(date){}
+
+void Revenue::setId(int id) {
+    if(id <= 0)
+        throw new std::invalid_argument("Id deve ser positivo\n");
+    this->id = id;
 }
+
 int Revenue::getId() const {return id;}
 const Money& Revenue::getAmount() const {return amount;}
 const Date& Revenue::getDate() const {return date;}
