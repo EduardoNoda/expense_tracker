@@ -1,6 +1,7 @@
 #include "Month.h"
 #include "Money.h"
 #include "Revenue.h"
+#include <stdexcept>
 
 Month::Month(int month, int year) 
     : month(month), year(year){
