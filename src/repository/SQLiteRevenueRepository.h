@@ -1,7 +1,7 @@
 #pragma once
 
 #include "RevenueRepository.h"
-#include "Database.h"
+#include "../infrastructure/Database.h"
 #include <vector>
 
 class SQLiteRevenueRepository : public RevenueRepository{

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../domain/Revenue.h"
-#include <string.h>
 #include <vector>
 
 class RevenueRepository {

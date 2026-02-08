@@ -1,6 +1,7 @@
 #include "SQLiteRevenueRepository.h"
-#include "Database.h"
+#include "../infrastructure/Database.h"
 #include <sqlite3.h>
+#include <stdexcept>
 #include <vector>
 
 SQLiteRevenueRepository::SQLiteRevenueRepository(Database& db)

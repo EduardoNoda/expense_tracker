@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Database.h"
+#include "../infrastructure/Database.h"
 #include "ExpenseRepository.h"
 #include <vector>
 class SQLiteExpenseRepository : public ExpenseRepository{

@@ -1,5 +1,5 @@
 #include "SQLiteExpenseRepository.h"
-#include "Database.h"
+#include "../infrastructure/Database.h"
 #include <sqlite3.h>
 #include <vector>
 
