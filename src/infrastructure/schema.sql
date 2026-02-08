@@ -1,23 +1,25 @@
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE payment_methods (
+CREATE TABLE IF NOT EXISTS payment_methods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE,
+    type TEXT NOT NULL CHECK (type IN ('DEBIT','CREDIT','PIX','CASH')),
+    closing_day INTEGER CHECK (closing_day BETWEEN 1 AND 31)
 );
 
-CREATE TABLE revenues (
+CREATE TABLE IF NOT EXISTS revenues (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-    date TEXT NOT NULL, -- ISO 8601
+    date TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE expenses (
+CREATE TABLE IF NOT EXISTS expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     revenue_id INTEGER NOT NULL,
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
