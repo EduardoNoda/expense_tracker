@@ -1,9 +1,11 @@
 #include "AddExpenseUseCase.h"
+#include <stdexcept>
 
 AddExpenseUseCase::AddExpenseUseCase (
     ExpenseRepository& expenseRepository,
-    RevenueRepository& revenueRepository)
-    : expenseRepository(expenseRepository), revenueRepository(revenueRepository) {}
+    RevenueRepository& revenueRepository,
+    PaymentMethodRepository& paymentMethodRepository)
+    : expenseRepository(expenseRepository), revenueRepository(revenueRepository), paymentMethodRepository(paymentMethodRepository){}
 
 int AddExpenseUseCase::execute(int revenueId, Money money, Date date, int categoryId, int paymentMethodId) {
     Revenue revenue = revenueRepository.findById(revenueId);
@@ -15,5 +17,23 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, int catego
 
     Expense expense(money, date, categoryId, paymentMethodId);
 
+    PaymentMethod paymentMethod = paymentMethodRepository.findById(paymentMethodId);
+    Date impactDate = date;
+
+    if(paymentMethod.isCredit()) {
+        int closingDay = paymentMethod.getClosingDay();
+
+        int year = date.getYear();
+        int month = date.getMonth() + 1;
+
+        if (month == 13) {
+            month = 1;
+            year++;
+        }
+
+        impactDate = Date(closingDay, month, year);
+    }
+
     return expenseRepository.save(revenueId, expense);
 }
+
