@@ -1,14 +1,43 @@
-cmake_minimum_required(VERSION 3.20)
-project(ExpenseTracker LANGUAGES CXX)
+add_library(expense_core
+    domain/Date.cpp
+    domain/Money.cpp
+    domain/Expense.cpp
+    domain/Revenue.cpp
+    domain/Month.cpp
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    repository/SQLiteRevenueRepository.cpp
+    repository/SQLiteExpenseRepository.cpp
 
-configure_file(
-    ${CMAKE_SOURCE_DIR}/src/infrastructure/schema.sql
-    ${CMAKE_BINARY_DIR}/schema.sql
-    COPYONLY
+    infrastructure/Database.cpp
+    infrastructure/Schema.cpp
+
+    application/AddExpenseUseCase.cpp
+    application/AddRevenueUseCase.cpp
+    application/GetMonthlySummaryUseCase.cpp
+
+    interface/cli/AddRevenueCommand.cpp
 )
 
-add_subdirectory(src)
-add_subdirectory(test)
+target_include_directories(expense_core
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_executable(expense_tracker
+    main.cpp
+    interface/cli/CommandFactory.cpp
+    interface/cli/ArgParser.cpp
+)
+
+target_link_libraries(expense_tracker
+    PRIVATE expense_core
+)
+
+target_include_directories(expense_tracker
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+find_package(SQLite3 REQUIRED)
+
+target_link_libraries(expense_core
+    PUBLIC SQLite::SQLite3
+)
