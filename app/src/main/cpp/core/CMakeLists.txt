@@ -1,21 +1,22 @@
 add_library(expense_core
-    domain/Date.cpp
-    domain/Money.cpp
-    domain/Expense.cpp
-    domain/Revenue.cpp
-    domain/Month.cpp
+        domain/Date.cpp
+        domain/Money.cpp
+        domain/Expense.cpp
+        domain/Revenue.cpp
+        domain/Month.cpp
 
-    repository/SQLiteRevenueRepository.cpp
-    repository/SQLiteExpenseRepository.cpp
+        repository/SQLiteRevenueRepository.cpp
+        repository/SQLiteExpenseRepository.cpp
+        core/repository/SQLitePaymentMethodRepository.cpp
 
-    infrastructure/Database.cpp
-    infrastructure/Schema.cpp
+        infrastructure/Database.cpp
+        infrastructure/Schema.cpp
 
-    application/AddExpenseUseCase.cpp
-    application/AddRevenueUseCase.cpp
-    application/GetMonthlySummaryUseCase.cpp
+        application/AddExpenseUseCase.cpp
+        application/AddRevenueUseCase.cpp
+        application/GetMonthlySummaryUseCase.cpp
 
-    interface/cli/AddRevenueCommand.cpp
+        interface/cli/AddRevenueCommand.cpp
 )
 
 target_include_directories(expense_core
@@ -23,9 +24,9 @@ target_include_directories(expense_core
 )
 
 add_executable(expense_tracker
-    main.cpp
-    interface/cli/CommandFactory.cpp
-    interface/cli/ArgParser.cpp
+        main.cpp
+        interface/cli/CommandFactory.cpp
+        interface/cli/ArgParser.cpp
 )
 
 target_link_libraries(expense_tracker
