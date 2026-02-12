@@ -1,5 +1,6 @@
 package br.com.expensetracker.viewmodel
 
+import android.util.Log
 import br.com.expensetracker.bridge.CoreBridge
 import java.time.LocalDate
 
@@ -10,6 +11,7 @@ class SummaryViewModel {
         val month = now.monthValue
         val year = now.year
         val result = CoreBridge.getMonthSummary(month, year)
+        Log.d("UI_DEBUG", "Revenue: ${result[0]}")
 
         return SummaryUiState(
             month = month,
@@ -20,4 +22,13 @@ class SummaryViewModel {
         )
     }
 
+    fun addRevenue(amount: Long) {
+        val now = LocalDate.now()
+        CoreBridge.addRevenueUseCase(
+            amount,
+            now.dayOfMonth,
+            now.monthValue,
+            now.year
+        )
+    }
 }
