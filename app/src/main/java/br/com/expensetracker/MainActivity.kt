@@ -12,7 +12,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val dbPath = applicationContext.getDatabasePath("expense.db").absolutePath
+        CoreBridge.initDatabase(dbPath)
+
         val screen = SummaryScreen(SummaryViewModel())
         setContentView(screen.render(this))
+
     }
 }
