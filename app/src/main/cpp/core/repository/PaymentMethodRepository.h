@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../src/domain/PaymentMethod.h"
+#include "../domain/PaymentMethod.h"
 
 class PaymentMethodRepository {
 public:

@@ -1,6 +1,6 @@
 #include "SQLiteRevenueRepository.h"
 #include "../infrastructure/Database.h"
-#include <sqlite3.h>
+#include "../../sqlite3/sqlite3.h"
 #include <stdexcept>
 #include <vector>
 
@@ -25,8 +25,8 @@ int SQLiteRevenueRepository::save(const Revenue& revenue) {
 std::vector<Revenue> SQLiteRevenueRepository::findByMonth(int month, int year) {
     std::vector<Revenue> revenues;
 
-    const char* sql = "SELECT id, amount_cents, date"
-                    "FROM revenues"
+    const char* sql = "SELECT id, amount_cents, date "
+                    "FROM revenues "
                     "WHERE date >= ? "
                       "AND date < ?";
 
@@ -58,6 +58,11 @@ Revenue SQLiteRevenueRepository::findById(int revenueId) {
     
     sqlite3_stmt* stmt;
     sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
+
+    if (sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        throw std::runtime_error(sqlite3_errmsg(database.get()));
+    }
+    
     sqlite3_bind_int(stmt, 1, revenueId);
 
     if (sqlite3_step(stmt) != SQLITE_ROW) {

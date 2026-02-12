@@ -1,11 +1,11 @@
 #include "Database.h"
-#include <sqlite3.h>
+#include "../../sqlite3/sqlite3.h"
 #include <stdexcept>
 
-Database::Database (const std::string& path) 
+Database::Database (const std::string& path)
     : db(nullptr) {
         if(sqlite3_open(path.c_str(), &db) != SQLITE_OK)
-            throw new std::invalid_argument("Falha ao tentar abrir o banco de dados\n");
+            throw std::invalid_argument("Falha ao tentar abrir o banco de dados\n");
 }
 
 Database::~Database() {
