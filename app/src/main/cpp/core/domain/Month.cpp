@@ -35,3 +35,15 @@ Money Month::totalExpenses() const {
 Money Month::balance() const {
     return totalRevenue() - totalExpenses();
 }
+
+Money Month::getTotalRevenue() const {
+    return totalRevenue();
+}
+
+Money Month::getTotalExpenses() const {
+    return totalExpenses();
+}
+
+Money Month::getBalance() const {
+    return balance();
+}
