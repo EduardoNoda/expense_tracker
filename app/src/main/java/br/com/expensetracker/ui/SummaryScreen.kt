@@ -41,6 +41,19 @@ class SummaryScreen(private val viewModel: SummaryViewModel) {
                 refresh()
             }
         }
+        val revenues = viewModel.loadRevenues()
+
+        revenues.forEach { revenue ->
+            val tv = TextView(context)
+            tv.text = """
+                Receita #${revenue.id}
+                ${MoneyFormatter.format(revenue.amountCents)}
+                Data: ${revenue.date}
+            """.trimIndent()
+
+            layout.addView(tv)
+        }
+
 
         refresh()
 

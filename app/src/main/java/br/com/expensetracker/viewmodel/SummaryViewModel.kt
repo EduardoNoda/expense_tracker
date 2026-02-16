@@ -3,7 +3,7 @@ package br.com.expensetracker.viewmodel
 import android.util.Log
 import br.com.expensetracker.bridge.CoreBridge
 import java.time.LocalDate
-
+import br.com.expensetracker.viewmodel.RevenueUI
 class SummaryViewModel {
 
     fun loadCurrentMonth(): SummaryUiState {
@@ -31,4 +31,22 @@ class SummaryViewModel {
             now.year
         )
     }
+    fun loadRevenues(): List<RevenueUI> {
+        val now = LocalDate.now()
+        val raw = CoreBridge.getRevenuesForMonth(now.monthValue, now.year)
+
+        return raw
+            .split("\n")
+            .filter { it.isNotBlank() }
+            .map {
+                val parts = it.split(";")
+                RevenueUI(
+                    id = parts[0].toInt(),
+                    amountCents = parts[1].toLong(),
+                    date = parts[2]
+                )
+            }
+    }
+
+
 }
