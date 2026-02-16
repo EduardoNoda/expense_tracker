@@ -47,3 +47,7 @@ Money Month::getTotalExpenses() const {
 Money Month::getBalance() const {
     return balance();
 }
+
+const std::vector<Revenue>& Month::getRevenues() const {
+    return revenues;
+}

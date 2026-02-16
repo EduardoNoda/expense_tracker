@@ -12,6 +12,7 @@ public:
     Money totalExpenses() const;
     Money balance() const;
 
+    const std::vector<Revenue>& getRevenues() const;
     Money getTotalRevenue() const;
     Money getTotalExpenses() const;
     Money getBalance() const;
