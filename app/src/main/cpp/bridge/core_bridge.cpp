@@ -6,6 +6,7 @@
 #include "../core/application/AddRevenueUseCase.h"
 #include <android/log.h>
 #include <android/log.h>
+#include <sstream>
 
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "EXPENSE_CORE", __VA_ARGS__)
 
@@ -125,4 +126,23 @@ Java_br_com_expensetracker_bridge_CoreBridge_addRevenueUseCase(JNIEnv *env, jobj
 
     addRevenue->execute(money, date);
     LOGI("Revenue inserted successfully");
+}
+std::string getRevenuesForMonth(int month, int year) {
+    Month m = summaryUseCase->execute(month, year);
+    std::basic_stringstream<char> ss;
+
+    for(const auto& r : m.getRevenues()){
+        ss << r.getId() << ";"
+            << r.getAmount().getCents() << ";"
+            << r.getDate().toISO() << ";"
+            << "\n";
+    }
+    return ss.str();
+}
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_getRevenuesForMonth(JNIEnv *env, jobject thiz,
+                                                                 jint month, jint year) {
+    std::string result = getRevenuesForMonth(month, year);
+    return env->NewStringUTF(result.c_str());
 }
