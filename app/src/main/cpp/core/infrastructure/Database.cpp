@@ -25,3 +25,10 @@ void Database::exec(const std::string& sql) {
         throw std::runtime_error(error);
     }
 }
+void Database::beginTransaction() {
+    exec("BEGIN TRANSACTION;");
+}
+
+void Database::commitTransaction() {
+    exec("COMMIT;");
+}

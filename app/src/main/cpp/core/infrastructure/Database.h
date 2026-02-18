@@ -11,6 +11,8 @@ public:
     sqlite3* get();
 
     void exec(const std::string& sql);
+    void beginTransaction();
+    void commitTransaction();
 private:
     sqlite3* db;
 };
