@@ -2,6 +2,7 @@ package br.com.expensetracker.viewmodel
 
 import android.util.Log
 import br.com.expensetracker.bridge.CoreBridge
+import br.com.expensetracker.ui.SummaryScreen
 import java.time.LocalDate
 import br.com.expensetracker.viewmodel.RevenueUI
 class SummaryViewModel {
@@ -47,6 +48,21 @@ class SummaryViewModel {
                 )
             }
     }
+    fun addExpenseToRevenue(revenueId: Int) {
+        val now = LocalDate.now()
 
+        CoreBridge.addExpenseToRevenue(
+            revenueId,
+            10000, // R$100 fixo
+            now.dayOfMonth,
+            now.monthValue,
+            now.year
+        )
+        reload()
+    }
 
+    fun reload () {
+        loadCurrentMonth()
+        loadRevenues()
+    }
 }
