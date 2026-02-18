@@ -21,32 +21,27 @@ static GetMonthlySummaryUseCase* summaryUseCase = nullptr;
 static AddRevenueUseCase* addRevenue = nullptr;
 static AddExpenseUseCase* addExpenseUseCase = nullptr;
 
-extern "C"
-JNIEXPORT jlongArray JNICALL
-Java_br_com_expensetracker_bridge_CoreBridge_getMonthSummary(JNIEnv *env, jobject thiz, jint month, jint year) {
-    if(summaryUseCase == nullptr)
-        return env->NewLongArray(0);
-
-    Month result = summaryUseCase->execute(month, year);
-
-    jlongArray array = env->NewLongArray(3);
-    jlong temp[3];
-
-    temp[0] = result.getTotalRevenue().getCents();
-    temp[1] = result.getTotalExpenses().getCents();
-    temp[2] = result.getBalance().getCents();
-
-    env->SetLongArrayRegion(array, 0, 3, temp);
-    LOGI("Fetching month summary");
-    LOGI("Revenue cents: %lld", result.getTotalRevenue().getCents());
-    return array;
+// --- FUNÇÃO AUXILIAR PARA SERIALIZAR LISTAS (NOVO) ---
+// Evita duplicar código para enviar listas ao Kotlin
+std::string serializeCursor(sqlite3_stmt* stmt, int colCount) {
+    std::stringstream ss;
+    while(sqlite3_step(stmt) == SQLITE_ROW) {
+        for(int i = 0; i < colCount; i++) {
+            const char* val = (const char*)sqlite3_column_text(stmt, i);
+            ss << (val ? val : "") << ";";
+        }
+        ss << "\n";
+    }
+    return ss.str();
 }
 static void ensureSchema(Database& db) {
     db.exec("PRAGMA foreign_keys = ON;");
 
     db.exec(R"(
-    DROP TABLE expenses;
-    DROP TABLE payment_methods;
+    DROP TABLE IF EXISTS expenses;
+    DROP TABLE IF EXISTS revenues;
+    DROP TABLE IF EXISTS payment_methods;
+    DROP TABLE IF EXISTS categories;
     )");
 
     db.exec(R"(
@@ -59,8 +54,9 @@ static void ensureSchema(Database& db) {
     db.exec(R"(
     CREATE TABLE IF NOT EXISTS payment_methods (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
         type TEXT NOT NULL CHECK (type IN ('IMMEDIATE','CREDIT')),
-        closing_day INTEGER CHECK (closing_day IS NULL OR closing_day BETWEEN 1 AND 31)
+        closing_day INTEGER CHECK (closing_day IS NULL OR closing_day BETWEEN 1 AND 31),
         due_day INTEGER CHECK (due_day IS NULL OR due_day BETWEEN 1 AND 31)
     );
     )");
@@ -68,6 +64,7 @@ static void ensureSchema(Database& db) {
     db.exec(R"(
     CREATE TABLE IF NOT EXISTS revenues (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
         amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
         date TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -96,8 +93,9 @@ static void ensureSchema(Database& db) {
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Dinheiro','IMMEDIATE')
+    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Impacto Imediato', 'IMMEDIATE')
     )");
+
 
     sqlite3_stmt* stmt;
     sqlite3_prepare_v2(db.get(), "SELECT COUNT(*) FROM payment_methods;", -1, &stmt, nullptr);
@@ -127,11 +125,8 @@ Java_br_com_expensetracker_bridge_CoreBridge_initDatabase(
         jstring path) {
 
     try {
-
         const char* dbPath = env->GetStringUTFChars(path, nullptr);
-
         database = new Database(dbPath);
-
         LOGI("DB PATH: %s", dbPath);
         ensureSchema(*database);
 
@@ -153,63 +148,150 @@ Java_br_com_expensetracker_bridge_CoreBridge_initDatabase(
         );
     }
 }
+extern "C"
+JNIEXPORT jlongArray JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_getMonthSummary(JNIEnv *env, jobject thiz, jint month, jint year) {
+    if(summaryUseCase == nullptr)
+        return env->NewLongArray(0);
+    try {
+        Month result = summaryUseCase->execute(month, year);
 
+        jlongArray array = env->NewLongArray(3);
+        jlong temp[3];
+
+        temp[0] = result.getTotalRevenue().getCents();
+        temp[1] = result.getTotalExpenses().getCents();
+        temp[2] = result.getBalance().getCents();
+
+        env->SetLongArrayRegion(array, 0, 3, temp);
+        LOGI("Fetching month summary");
+        LOGI("Revenue cents: %lld", result.getTotalRevenue().getCents());
+        return array;
+    } catch (const std::exception& e) {
+        LOGI("Error getting summary: %s", e.what());
+        return env->NewLongArray(0);
+    }
+}
 extern "C"
 JNIEXPORT void JNICALL
-Java_br_com_expensetracker_bridge_CoreBridge_addRevenueUseCase(JNIEnv *env, jobject thiz,
+Java_br_com_expensetracker_bridge_CoreBridge_addRevenueUseCase(JNIEnv *env, jobject thiz, jstring name,
                                                                jlong amount, jint day, jint month,
                                                                jint year) {
-    if(addRevenue == nullptr)
-        return;
+    if(addRevenue == nullptr) return;
 
-    Date date(day, month, year);
-    Money money(amount);
+    const char *nameCStr = env->GetStringUTFChars(name, nullptr);
+    try {
+        std::string nameStr(nameCStr);
 
-    addRevenue->execute(money, date);
-    LOGI("Revenue inserted successfully");
-}
-std::string getRevenuesForMonth(int month, int year) {
-    Month m = summaryUseCase->execute(month, year);
-    std::basic_stringstream<char> ss;
+        Date date(day, month, year);
+        Money money(amount);
 
-    for(const auto& r : m.getRevenues()){
-        ss << r.getId() << ";"
-            << r.getAmount().getCents() << ";"
-            << r.getDate().toISO() << ";"
-            << "\n";
+        addRevenue->execute(nameCStr, money, date);
+        LOGI("Revenue inserted successfully");
+    } catch (const std::exception& e) {
+        LOGI("Error adding revenue: %s", e.what());
     }
-    return ss.str();
+    env->ReleaseStringUTFChars(name, nameCStr);
 }
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_br_com_expensetracker_bridge_CoreBridge_getRevenuesForMonth(JNIEnv *env, jobject thiz,
-                                                                 jint month, jint year) {
-    std::string result = getRevenuesForMonth(month, year);
-    return env->NewStringUTF(result.c_str());
-}
-void addExpenseToRevenue(int revenueId, Money amount, int day, int month, int year){
-    Money money(amount);
-    Date date(day, month, year);
+Java_br_com_expensetracker_bridge_CoreBridge_getRevenuesForMonth(JNIEnv *env, jobject thiz, jint month, jint year) {
+    if(summaryUseCase == nullptr) return env->NewStringUTF("");
 
-    int categoryId = 1;      // fixo por enquanto
-    int paymentMethodId = 1; // fixo por enquanto
+    try {
+        Month m = summaryUseCase->execute(month, year);
+        std::basic_stringstream<char> ss;
 
-    addExpenseUseCase->execute(
-            revenueId,
-            money,
-            date,
-            categoryId,
-            paymentMethodId
-    );
+        for (const auto &r: m.getRevenues()) {
+            // 1. Dados da Receita
+            ss << r.getId() << ";"
+               << r.getAmount().getCents() << ";"
+               << r.getDate().toISO() << ";"
+               << r.getName() << "|"; // Pipe separador
+
+            // 2. Dados das Despesas (Isso estava faltando no seu código enviado)
+            for (const auto &e : r.getExpenses()) {
+                ss << e.getAmount().getCents() << ";" << e.getCategoryId() << "#";
+            }
+
+            ss << "\n";
+        }
+        return env->NewStringUTF(ss.str().c_str());
+    } catch (const std::exception& e) {
+        LOGI("Error listing revenues: %s", e.what());
+        return env->NewStringUTF("");
+    }
 }
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_getAllCategories(JNIEnv *env, jobject thiz) {
+    if(database == nullptr) return env->NewStringUTF("");
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database->get(), "SELECT id, name FROM categories ORDER BY name", -1, &stmt, nullptr);
+    std::string res = serializeCursor(stmt, 2); // id;name;
+    sqlite3_finalize(stmt);
+    return env->NewStringUTF(res.c_str());
+}
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_getPaymentMethods(JNIEnv *env, jobject thiz) {
+    if(database == nullptr) return env->NewStringUTF("");
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database->get(), "SELECT id, name FROM payment_methods ORDER BY id", -1, &stmt, nullptr);
+    std::string res = serializeCursor(stmt, 2);
+    sqlite3_finalize(stmt);
+    return env->NewStringUTF(res.c_str());
+}
+// REFATORADO: Agora aceita categoryId e paymentMethodId vindo da UI
+// ... includes ...
+
 extern "C"
 JNIEXPORT void JNICALL
 Java_br_com_expensetracker_bridge_CoreBridge_addExpenseToRevenue(JNIEnv *env, jobject thiz,
-                                                                 jint revenue_id, jlong amount,
-                                                                 jint day, jint month, jint year) {
+                                                                 jint revenue_id,
+                                                                 jlong amount,
+                                                                 jint day, jint month, jint year,
+                                                                 jint categoryId,
+                                                                 jint paymentMethodId,
+                                                                 jint installments // <--- NOVO
+) {
+    if(addExpenseUseCase == nullptr) return;
+
     try {
-        addExpenseToRevenue(revenue_id, amount, day, month, year);
-    }catch (const std::exception& e){
-        __android_log_print(ANDROID_LOG_ERROR, "CoreBridge", "Error: %s", e.what());
+        Money money(amount);
+        Date date(day, month, year);
+        Date impactDate = date;
+
+        addExpenseUseCase->execute(
+                revenue_id,
+                money,
+                date,
+                impactDate,
+                categoryId,
+                paymentMethodId,
+                installments // <--- Passando pro Core
+        );
+    } catch (const std::exception& e){
+        LOGI("Error adding expense: %s", e.what());
     }
+}
+// Adicione essa função no final do arquivo
+extern "C"
+JNIEXPORT void JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_addPaymentMethod(JNIEnv *env, jobject thiz,
+                                                              jstring name,
+                                                              jint closingDay, jint dueDay) {
+    if(paymentMethodRepository == nullptr) return;
+
+    const char *nameCStr = env->GetStringUTFChars(name, nullptr);
+    try {
+        // Assume sempre CREDIT para cartões adicionados pelo usuário no MVP
+        paymentMethodRepository->save(std::string(nameCStr), "CREDIT", closingDay, dueDay);
+        LOGI("New credit card added: %s", nameCStr);
+    } catch (const std::exception& e) {
+        LOGI("Error adding card: %s", e.what());
+    }
+    env->ReleaseStringUTFChars(name, nameCStr);
 }
