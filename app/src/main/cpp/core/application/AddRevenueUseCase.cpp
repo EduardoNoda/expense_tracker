@@ -8,8 +8,8 @@
 AddRevenueUseCase::AddRevenueUseCase(RevenueRepository& revenueRepository) 
     : revenueRepository(revenueRepository){}
 
-int AddRevenueUseCase::execute(const Money& money, const Date& date) const{
-    Revenue revenue(money, date);
+int AddRevenueUseCase::execute(const std::string& name, const Money& money, const Date& date) const{
+    Revenue revenue(name, money, date);
 
     LOGI("AddRevenue is calling\n");
 
