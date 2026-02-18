@@ -10,3 +10,7 @@ bool PaymentMethod::isCredit() const {
 int PaymentMethod::getClosingDay() const {
     return closingDay;
 }
+
+int PaymentMethod::getDueDay() const {
+    return dueDay;
+}

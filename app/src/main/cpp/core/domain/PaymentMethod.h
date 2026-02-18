@@ -10,8 +10,10 @@ public:
 
     bool isCredit() const;
     int getClosingDay() const;
+    int getDueDay() const;
 private:
     int id;
     PaymentType type;
     int closingDay;
+    int dueDay;
 };
