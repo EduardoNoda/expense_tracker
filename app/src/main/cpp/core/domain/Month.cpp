@@ -12,42 +12,34 @@ Month::Month(int month, int year)
         throw std::invalid_argument("Invalid year");
 }
 
-void Month::addRevenue(const Revenue& revenue) {
-    revenues.push_back(revenue);
-}
+void Month::addRevenue(const Revenue& revenue) { revenues.push_back(revenue); }
+
+void Month::addExpense(const Expense& expense) { expenses.push_back(expense); }
 
 Money Month::totalRevenue() const {
     Money total(0);
-    for(const auto& r : revenues) {
+    for(const auto& r : revenues)
         total = total + r.getAmount();
-    }
+
     return total;
 }
 
 Money Month::totalExpenses() const {
     Money total(0);
-    for(const auto& e : revenues) {
-        total = total + e.totalExpenses();
-    }
+    for(const auto& e : expenses)
+        total = total + e.getAmount();
+
     return total;
 }
 
-Money Month::balance() const {
-    return totalRevenue() - totalExpenses();
-}
+Money Month::balance() const { return totalRevenue() - totalExpenses(); }
 
-Money Month::getTotalRevenue() const {
-    return totalRevenue();
-}
+Money Month::getTotalRevenue() const { return totalRevenue(); }
 
-Money Month::getTotalExpenses() const {
-    return totalExpenses();
-}
+Money Month::getTotalExpenses() const { return totalExpenses(); }
 
-Money Month::getBalance() const {
-    return balance();
-}
+Money Month::getBalance() const { return balance(); }
 
-const std::vector<Revenue>& Month::getRevenues() const {
-    return revenues;
-}
+const std::vector<Revenue>& Month::getRevenues() const { return revenues; }
+
+const std::vector<Expense>& Month::getExpenses() const { return expenses; }
