@@ -8,13 +8,14 @@ SQLiteRevenueRepository::SQLiteRevenueRepository(Database& db)
     : database(db) {}
 
 int SQLiteRevenueRepository::save(const Revenue& revenue) {
-    const char* sql = "INSERT INTO revenues (amount_cents, date) VALUES (?, ?);";
+    const char* sql = "INSERT INTO revenues (name, amount_cents, date) VALUES (?, ?, ?);";
 
     sqlite3_stmt* stmt;
     sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
 
-    sqlite3_bind_int64(stmt, 1, revenue.getAmount().getCents());
-    sqlite3_bind_text(stmt, 2, revenue.getDate().toISO().c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 1, revenue.getName().c_str(), -1, SQLITE_TRANSIENT); // <-- Bind Name
+    sqlite3_bind_int64(stmt, 2, revenue.getAmount().getCents());
+    sqlite3_bind_text(stmt, 3, revenue.getDate().toISO().c_str(), -1, SQLITE_TRANSIENT);
 
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -25,7 +26,7 @@ int SQLiteRevenueRepository::save(const Revenue& revenue) {
 std::vector<Revenue> SQLiteRevenueRepository::findByMonth(int month, int year) {
     std::vector<Revenue> revenues;
 
-    const char* sql = "SELECT id, amount_cents, date "
+    const char* sql = "SELECT id, name, amount_cents, date "
                     "FROM revenues "
                     "WHERE date >= ? "
                       "AND date < ?";
@@ -40,10 +41,12 @@ std::vector<Revenue> SQLiteRevenueRepository::findByMonth(int month, int year) {
 
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         int id = sqlite3_column_int(stmt, 0);
-        long long amountCents = sqlite3_column_int64(stmt, 1);
-        std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        const unsigned char* nameText = sqlite3_column_text(stmt, 1);
+        std::string name = nameText ? reinterpret_cast<const char*>(nameText) : "Sem Nome";
+        long long amountCents = sqlite3_column_int64(stmt, 2);
+        std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
 
-        Revenue revenue(Money(amountCents), Date::fromISO(dateISO));
+        Revenue revenue(name, Money(amountCents), Date::fromISO(dateISO));
         revenue.setId(id);
         revenues.push_back(revenue);
     }
@@ -52,7 +55,7 @@ std::vector<Revenue> SQLiteRevenueRepository::findByMonth(int month, int year) {
 }
 
 Revenue SQLiteRevenueRepository::findById(int revenueId) {
-    const char* sql = "SELECT id, amount_cents, date "
+    const char* sql = "SELECT id, name, amount_cents, date "
                     "FROM revenues "
                     "WHERE id = ?";
     
@@ -71,10 +74,12 @@ Revenue SQLiteRevenueRepository::findById(int revenueId) {
     }
 
     int id = sqlite3_column_int(stmt, 0);
-    long long amountCents = sqlite3_column_int64(stmt, 1);
-    std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+    const unsigned char* rawName = sqlite3_column_text(stmt, 1);
+    std::string name = rawName ? reinterpret_cast<const char*>(rawName) : "Sem Nome";
+    long long amountCents = sqlite3_column_int64(stmt, 2);
+    std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
 
-    Revenue revenue(Money(amountCents), Date::fromISO(dateISO));
+    Revenue revenue(name, Money(amountCents), Date::fromISO(dateISO));
     revenue.setId(id);
     
     sqlite3_finalize(stmt);
