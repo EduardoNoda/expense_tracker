@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS categories (
 CREATE TABLE IF NOT EXISTS payment_methods (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
-    type TEXT NOT NULL CHECK (type IN ('DEBIT','CREDIT','PIX','CASH')),
+    type TEXT NOT NULL CHECK (type IN ('IMMEDIATE','CREDIT')),
     closing_day INTEGER CHECK (closing_day BETWEEN 1 AND 31)
 );
 
@@ -32,3 +32,6 @@ CREATE TABLE IF NOT EXISTS expenses (
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT,
     FOREIGN KEY (payment_method_id) REFERENCES payment_methods(id) ON DELETE RESTRICT
 );
+INSERT OR IGNORE INTO categories (id, name) VALUES (1, 'Geral');
+INSERT OR IGNORE INTO payment_methods (id, name, type, closing_day)
+VALUES (1, 'Dinheiro', 'IMMEDIATE', 1);
