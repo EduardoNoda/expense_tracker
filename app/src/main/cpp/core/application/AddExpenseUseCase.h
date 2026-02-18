@@ -12,7 +12,7 @@ public:
         PaymentMethodRepository& paymentMethodRepository
     );
 
-    int execute(int revenueId, Money amountCents, Date date, int categoryId, int paymentMethodId);
+    int execute(int revenueId, Money amountCents, Date date, Date impactDate, int categoryId, int paymentMethodId, int installments);
 
 private:
     ExpenseRepository& expenseRepository;

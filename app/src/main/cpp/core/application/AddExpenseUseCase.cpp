@@ -1,5 +1,6 @@
 #include "AddExpenseUseCase.h"
 #include <stdexcept>
+#include <android/log.h>
 
 AddExpenseUseCase::AddExpenseUseCase (
     ExpenseRepository& expenseRepository,
@@ -7,38 +8,72 @@ AddExpenseUseCase::AddExpenseUseCase (
     PaymentMethodRepository& paymentMethodRepository)
     : expenseRepository(expenseRepository), revenueRepository(revenueRepository), paymentMethodRepository(paymentMethodRepository){}
 
-int AddExpenseUseCase::execute(int revenueId, Money money, Date date, int categoryId, int paymentMethodId) {
-    Revenue revenue = revenueRepository.findById(revenueId);
+Date addMonths(const Date& date, int monthsToAdd) {
+    int d = date.getDay();
+    int m = date.getMonth();
+    int y = date.getYear();
 
-    if (revenue.getDate().getMonth() != date.getMonth() ||
-        revenue.getDate().getYear() != date.getYear()) {
-        throw std::invalid_argument("Expense date must belong to revenue month");
-    }
+    int totalMonths = m + monthsToAdd;
 
-    Expense expense(money, date, categoryId, paymentMethodId);
+    // Matemática de ano: (totalMonths - 1) / 12 dá quantos anos avançou
+    int yearsToAdd = (totalMonths - 1) / 12;
+    y += yearsToAdd;
 
+    // Matemática de mês: O resto da divisão ajustado para 1-12
+    m = (totalMonths - 1) % 12 + 1;
+
+    return Date(d, m, y);
+}
+
+int AddExpenseUseCase::execute(int revenueId, Money money, Date date, Date initialImpactDate,
+                               int categoryId, int paymentMethodId, int installments) {
+
+    // 1. Validação básica
+    if (installments < 1) installments = 1;
     PaymentMethod paymentMethod = paymentMethodRepository.findById(paymentMethodId);
-    Date impactDate = date;
+    if (!paymentMethod.isCredit()) installments = 1;
 
-    if(paymentMethod.isCredit()) {
-        int closingDay = paymentMethod.getClosingDay();
-        int dueDay = paymentMethod.getDueDay();
+    // 2. Cálculo do valor da parcela (sem centavos perdidos no MVP)
+    long long totalCents = money.getCents();
+    long long installmentCents = totalCents / installments;
+    Money installmentMoney(installmentCents);
 
-        int purchaseDay = date.getDay();
-        int impactYear = date.getYear();
-        int impactMonth = date.getMonth();
+    int lastId = 0;
 
-        if(purchaseDay > closingDay) {
-            impactMonth++;
-            if (impactMonth == 13) {
-                impactMonth = 1;
-                impactYear++;
+    expenseRepository.beginTransaction();
+
+    // 3. Loop de Parcelas
+    for (int i = 0; i < installments; i++) {
+        // Data base da parcela 'i' (ex: compra hoje, parcela 2 é hoje + 1 mês)
+        Date currentInstallmentDate = addMonths(date, i);
+
+        Date finalImpactDate = currentInstallmentDate;
+
+        // 4. Regra de Cartão de Crédito
+        if (paymentMethod.isCredit()) {
+            int closingDay = paymentMethod.getClosingDay();
+            int dueDay = paymentMethod.getDueDay();
+
+            // Se a compra (ou a parcela virtual) cair depois do fechamento, joga pro mês seguinte
+            if (currentInstallmentDate.getDay() > closingDay) {
+                // Avança 1 mês no vencimento
+                finalImpactDate = addMonths(currentInstallmentDate, 1);
+                // Fixa o dia no dia de vencimento
+                finalImpactDate = Date(dueDay, finalImpactDate.getMonth(), finalImpactDate.getYear());
+            } else {
+                // Cai no mesmo mês, mas no dia do vencimento
+                finalImpactDate = Date(dueDay, currentInstallmentDate.getMonth(), currentInstallmentDate.getYear());
             }
         }
 
-        impactDate = Date(dueDay, impactMonth, impactYear);
+        Expense expense(revenueId,installmentMoney, currentInstallmentDate, finalImpactDate, categoryId, paymentMethodId);
+        lastId = expenseRepository.save(revenueId, expense);
+
+        __android_log_print(ANDROID_LOG_INFO, "CORE_LOGIC",
+                            "Parcela %d/%d | Data Base: %s | Vencimento: %s",
+                            i+1, installments, currentInstallmentDate.toISO().c_str(), finalImpactDate.toISO().c_str());
     }
+    expenseRepository.commitTransaction();
 
-    return expenseRepository.save(revenueId, expense);
+    return lastId;
 }
-
