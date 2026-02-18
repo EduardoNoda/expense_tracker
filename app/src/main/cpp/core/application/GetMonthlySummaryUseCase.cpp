@@ -7,16 +7,33 @@ GetMonthlySummaryUseCase::GetMonthlySummaryUseCase(
 
 Month GetMonthlySummaryUseCase::execute(int month, int year) {
     Month result(month, year);
-    
     auto revenues = revenueRepository.findByMonth(month, year);
 
-    for(auto& r : revenues) {
-        auto expenses = expenseRepository.findByRevenue(r.getId());
-        for(auto& e : expenses) {
-            r.addExpense(e);
+    auto allExpensesInMonth = expenseRepository.findByImpactMonth(month, year);
+
+    if (!revenues.empty()) {
+        for (const auto& expense : allExpensesInMonth) {
+            bool matched = false;
+
+            for (auto& r : revenues) {
+                if (r.getId() == expense.getRevenueId()) {
+                    r.addExpense(expense);
+                    matched = true;
+                    break;
+                }
+            }
+
+            if (!matched) {
+                revenues[0].addExpense(expense);
+            }
         }
+    }
+    for(auto& r : revenues) {
         result.addRevenue(r);
     }
 
+    for(auto& e : allExpensesInMonth) {
+        result.addExpense(e);
+    }
     return result;
 }
