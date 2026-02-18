@@ -22,16 +22,21 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, int catego
 
     if(paymentMethod.isCredit()) {
         int closingDay = paymentMethod.getClosingDay();
+        int dueDay = paymentMethod.getDueDay();
 
-        int year = date.getYear();
-        int month = date.getMonth() + 1;
+        int purchaseDay = date.getDay();
+        int impactYear = date.getYear();
+        int impactMonth = date.getMonth();
 
-        if (month == 13) {
-            month = 1;
-            year++;
+        if(purchaseDay > closingDay) {
+            impactMonth++;
+            if (impactMonth == 13) {
+                impactMonth = 1;
+                impactYear++;
+            }
         }
 
-        impactDate = Date(closingDay, month, year);
+        impactDate = Date(dueDay, impactMonth, impactYear);
     }
 
     return expenseRepository.save(revenueId, expense);
