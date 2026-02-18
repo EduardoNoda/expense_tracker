@@ -9,6 +9,9 @@ public:
 
     int save(int revenueId, const Expense& expense) override;
     std::vector<Expense> findByRevenue(int revenueId) override;
+    std::vector<Expense> findByImpactMonth(int month, int year) override;
+    void beginTransaction() override;
+    void commitTransaction() override;
 private:
     Database& database;
 };
