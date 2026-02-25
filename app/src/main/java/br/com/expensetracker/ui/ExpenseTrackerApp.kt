@@ -1,7 +1,10 @@
 package br.com.expensetracker.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -23,29 +27,37 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import br.com.expensetracker.viewmodel.SimpleItem
 import br.com.expensetracker.viewmodel.SummaryViewModel
+import kotlinx.coroutines.launch
 
-data class TempExpenseData(
-    val amount: Long,
-    val catId: Int,
-    val payId: Int,
-    val installments: Int
-)
-
+// Adicione o revenueId aqui
+data class TempExpenseData(val revenueId: Int, val amount: Long, val catId: Int, val payId: Int, val installments: Int)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
     val state by viewModel.uiState.collectAsState()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // --- ESTADOS DE CONFIRMAÇÃO ---
+    // Sheets states independentes para evitar conflitos
+    val revenueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val expenseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+
     var showConfirmRevenueDialog by remember { mutableStateOf<Pair<String, Long>?>(null) }
-
-    // CORREÇÃO: Usando a classe de dados para suportar os 4 parâmetros
     var pendingExpenseConfirmation by remember { mutableStateOf<TempExpenseData?>(null) }
-
     var showAddCardDialog by remember { mutableStateOf(false) }
 
-    // --- POPUP DE CONFIRMAÇÃO (RECEITA) ---
+    // --- ALERTA: SEM RECEITAS ---
+    if (state.showNoRevenueWarning) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissNoRevenueWarning() },
+            title = { Text("Atenção") },
+            text = { Text("Você precisa adicionar pelo menos uma receita antes de registrar um gasto neste mês.") },
+            confirmButton = {
+                Button(onClick = { viewModel.dismissNoRevenueWarning() }) { Text("Entendi") }
+            }
+        )
+    }
+
+    // --- POPUPS DE CONFIRMAÇÃO ---
     if (showConfirmRevenueDialog != null) {
         val (name, amount) = showConfirmRevenueDialog!!
         AlertDialog(
@@ -58,40 +70,26 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
                     showConfirmRevenueDialog = null
                 }) { Text("Confirmar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showConfirmRevenueDialog = null }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showConfirmRevenueDialog = null }) { Text("Cancelar") } }
         )
     }
 
-    // --- POPUP DE CONFIRMAÇÃO (DESPESA) ---
-    // Agora isso funciona corretamente com parcelas
     if (pendingExpenseConfirmation != null) {
         val data = pendingExpenseConfirmation!!
-
         AlertDialog(
             onDismissRequest = { pendingExpenseConfirmation = null },
             title = { Text("Confirmar Despesa") },
             text = {
-                Column {
-                    Text("Deseja lançar um gasto de ${MoneyFormatter.format(data.amount)}?")
-                    if (data.installments > 1) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Parcelado em ${data.installments}x", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    }
-                }
+                // ... texto igual ...
             },
             confirmButton = {
                 Button(onClick = {
-                    // Chama a ViewModel para salvar de verdade
-                    viewModel.confirmAddExpense(data.amount, data.catId, data.payId, data.installments)
+                    // MUDANÇA: Agora passamos o data.revenueId como primeiro parâmetro!
+                    viewModel.confirmAddExpense(data.revenueId, data.amount, data.catId, data.payId, data.installments)
                     pendingExpenseConfirmation = null
-                    // O viewModel.confirmAddExpense já fecha o BottomSheet internamente
                 }) { Text("Confirmar") }
             },
-            dismissButton = {
-                TextButton(onClick = { pendingExpenseConfirmation = null }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { pendingExpenseConfirmation = null }) { Text("Cancelar") } }
         )
     }
 
@@ -108,25 +106,54 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
 
     // --- BOTTOM SHEETS ---
     if (state.isAddingRevenue) {
-        ModalBottomSheet(onDismissRequest = { viewModel.closeAddRevenueDialog() }, sheetState = sheetState) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.closeAddRevenueDialog() },
+            sheetState = revenueSheetState
+        ) {
             AddRevenueSheetContent(
-                onCancel = { viewModel.closeAddRevenueDialog() },
+                onCancel = {
+                    scope.launch {
+                        revenueSheetState.hide()
+                        viewModel.closeAddRevenueDialog()
+                    }
+                },
                 onConfirm = { name, amount ->
-                    showConfirmRevenueDialog = Pair(name, amount)
+                    scope.launch {
+                        revenueSheetState.hide()
+                        viewModel.closeAddRevenueDialog()
+                        showConfirmRevenueDialog = Pair(name, amount)
+                    }
                 }
             )
         }
     }
 
     if (state.isAddingExpense) {
-        ModalBottomSheet(onDismissRequest = { viewModel.closeAddExpenseDialog() }, sheetState = sheetState) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.closeAddExpenseDialog() },
+            sheetState = expenseSheetState
+        ) {
             AddExpenseSheetContent(
                 categories = state.categories,
                 paymentMethods = state.paymentMethods,
-                onCancel = { viewModel.closeAddExpenseDialog() },
-                // CORREÇÃO: Agora preenchemos o objeto temporário em vez de salvar direto
+                onCancel = {
+                    scope.launch {
+                        expenseSheetState.hide()
+                        viewModel.closeAddExpenseDialog()
+                    }
+                },
                 onConfirm = { amount, catId, payId, installments ->
-                    pendingExpenseConfirmation = TempExpenseData(amount, catId, payId, installments)
+                    // MUDANÇA: Capturamos o ID da receita ANTES de fechar o dialog
+                    val currentRevId = state.selectedRevenueIdForExpense
+                    if (currentRevId != null) {
+                        scope.launch {
+                            expenseSheetState.hide()
+                            viewModel.closeAddExpenseDialog() // Aqui ele é apagado do ViewModel
+
+                            // Mas nós guardamos ele aqui no objeto temporário!
+                            pendingExpenseConfirmation = TempExpenseData(currentRevId, amount, catId, payId, installments)
+                        }
+                    }
                 }
             )
         }
@@ -135,44 +162,181 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
     Scaffold(
         topBar = {
             CustomTopBar(
-                month = state.currentMonth,
-                year = state.currentYear,
-                onPrev = { viewModel.prevMonth() },
-                onNext = { viewModel.nextMonth() },
-                onAddCardClick = { showAddCardDialog = true }
+                month = state.currentMonth, year = state.currentYear,
+                onPrev = { viewModel.prevMonth() }, onNext = { viewModel.nextMonth() }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { viewModel.openAddRevenueDialog() },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            ) { Icon(Icons.Default.Add, "Nova Receita") }
+            var expandedFabMenu by remember { mutableStateOf(false) }
+
+            if (!state.isSelectingRevenueMode) {
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    FloatingActionButton(
+                        onClick = { expandedFabMenu = !expandedFabMenu },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ) {
+                        Icon(Icons.Default.Add, "Adicionar")
+                    }
+
+                    DropdownMenu(
+                        expanded = expandedFabMenu,
+                        onDismissRequest = { expandedFabMenu = false },
+                        offset = androidx.compose.ui.unit.DpOffset(x = 0.dp, y = (-16).dp)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Adicionar Gasto") },
+                            onClick = {
+                                expandedFabMenu = false
+                                viewModel.onAddExpenseActionClicked()
+                            },
+                            leadingIcon = { Icon(Icons.Default.ShoppingCart, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Adicionar Receita") },
+                            onClick = {
+                                expandedFabMenu = false
+                                viewModel.openAddRevenueDialog()
+                            },
+                            leadingIcon = { Icon(Icons.Default.AttachMoney, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Novo Cartão") },
+                            onClick = {
+                                expandedFabMenu = false
+                                showAddCardDialog = true
+                            },
+                            leadingIcon = { Icon(Icons.Default.Add, null) }
+                        )
+                    }
+                }
+            }
         }
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(Color(0xFFF5F5F5))
+            modifier = Modifier.fillMaxSize().padding(padding).background(Color(0xFFF5F5F5))
         ) {
             HeaderSummary(state.totalRevenue, state.totalExpense, state.balance)
-            Spacer(modifier = Modifier.height(24.dp))
+
+            AnimatedVisibility(visible = state.isSelectingRevenueMode) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Selecione a receita que receberá o gasto", style = MaterialTheme.typography.labelLarge)
+                        IconButton(onClick = { viewModel.cancelRevenueSelection() }) {
+                            Icon(Icons.Default.Close, "Cancelar")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             Text("Receitas do Mês", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
             Spacer(modifier = Modifier.height(8.dp))
+
             LazyColumn(
                 contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(state.revenues) { revenue ->
-                    RevenueCard(revenue, onAddExpenseClick = { viewModel.openAddExpenseDialog(revenue.id) })
+                    RevenueCard(
+                        revenue = revenue,
+                        isSelectingMode = state.isSelectingRevenueMode,
+                        onCardClick = {
+                            if (state.isSelectingRevenueMode) {
+                                // O usuário clicou na receita alvo, chama a ViewModel para abrir o modal de despesa.
+                                viewModel.openAddExpenseDialog(revenue.id)
+                            }
+                        }
+                    )
                 }
             }
         }
     }
 }
 
-// --- DIALOGO PARA ADICIONAR CARTÃO ---
+// --- CARD DE RECEITA ---
+@Composable
+fun RevenueCard(
+    revenue: br.com.expensetracker.viewmodel.RevenueUI,
+    isSelectingMode: Boolean,
+    onCardClick: () -> Unit
+) {
+    val totalSpent = revenue.expenses.sumOf { it.amountCents }
+    val remaining = revenue.amountCents - totalSpent
+
+    val scale = if (isSelectingMode) {
+        val infiniteTransition = rememberInfiniteTransition(label = "pulse_transition")
+        infiniteTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.03f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(600, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "PulsingCard"
+        ).value
+    } else 1f
+
+    val baseModifier = Modifier
+        .fillMaxWidth()
+        .scale(scale)
+
+    val finalModifier = if (isSelectingMode) {
+        baseModifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onCardClick
+        )
+    } else {
+        baseModifier
+    }
+
+    Card(
+        elevation = CardDefaults.cardElevation(if (isSelectingMode) 8.dp else 2.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isSelectingMode) Color(0xFFE8F5E9) else Color.White),
+        modifier = finalModifier
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(revenue.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Recebido: ${revenue.date}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            val progress = if (revenue.amountCents > 0) totalSpent.toFloat() / revenue.amountCents else 0f
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
+                color = if (progress > 0.9f) Color.Red else MaterialTheme.colorScheme.primary, trackColor = Color.LightGray.copy(alpha = 0.5f),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column { Text("Total", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(revenue.amountCents), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
+                Column(horizontalAlignment = Alignment.End) { Text("Restante", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(remaining), fontWeight = FontWeight.SemiBold, color = if (remaining < 0) Color.Red else Color(0xFF2E7D32)) }
+            }
+            if (revenue.expenses.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Gastos Vinculados:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                revenue.expenses.forEach { expense ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("- ${MoneyFormatter.format(expense.amountCents)}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- COMPONENTES AUXILIARES ---
+
 @Composable
 fun AddCardDialog(onDismiss: () -> Unit, onConfirm: (String, Int, Int) -> Unit) {
     var name by remember { mutableStateOf("") }
@@ -231,7 +395,6 @@ fun HeaderSummary(revenue: Long, expense: Long, balance: Long) {
     }
 }
 
-// --- CONTEÚDO DO SHEET: RECEITA ---
 @Composable
 fun AddRevenueSheetContent(
     onCancel: () -> Unit,
@@ -264,7 +427,6 @@ fun AddRevenueSheetContent(
     }
 }
 
-// --- CONTEÚDO DO SHEET: DESPESA ---
 @Composable
 fun AddExpenseSheetContent(
     categories: List<SimpleItem>,
@@ -275,104 +437,43 @@ fun AddExpenseSheetContent(
     var amountCents by remember { mutableLongStateOf(0L) }
     var selectedCat by remember { mutableStateOf<SimpleItem?>(null) }
     var selectedPay by remember { mutableStateOf<SimpleItem?>(null) }
-
-    // Estado do parcelamento como Texto para permitir digitação
     var installmentsText by remember { mutableStateOf("1") }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(24.dp)
-            .navigationBarsPadding(),
+        modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Adicionar Despesa", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 
-        MoneyInput(
-            valueCents = amountCents,
-            onValueChange = { amountCents = it },
-            label = "Valor Total",
-            modifier = Modifier.fillMaxWidth()
-        )
+        MoneyInput(valueCents = amountCents, onValueChange = { amountCents = it }, label = "Valor Total", modifier = Modifier.fillMaxWidth())
+        AppDropdown(label = "Categoria", items = categories, selectedItem = selectedCat, onItemSelected = { selectedCat = it })
+        AppDropdown(label = "Forma de Pagamento", items = paymentMethods, selectedItem = selectedPay, onItemSelected = { selectedPay = it })
 
-        AppDropdown(
-            label = "Categoria",
-            items = categories,
-            selectedItem = selectedCat,
-            onItemSelected = { selectedCat = it }
-        )
-
-        AppDropdown(
-            label = "Forma de Pagamento",
-            items = paymentMethods,
-            selectedItem = selectedPay,
-            onItemSelected = { selectedPay = it }
-        )
-
-        // Seção de Parcelamento (Híbrida: Botões + Texto)
         if (selectedPay != null && selectedPay!!.id > 1) {
             Column {
                 Text("Parcelamento", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Botão Menos
-                    FilledTonalIconButton(
-                        onClick = {
-                            val current = installmentsText.toIntOrNull() ?: 1
-                            if (current > 1) installmentsText = (current - 1).toString()
-                        }
-                    ) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalIconButton(onClick = { val c = installmentsText.toIntOrNull() ?: 1; if (c > 1) installmentsText = (c - 1).toString() }) {
                         Icon(Icons.Default.KeyboardArrowLeft, "-")
                     }
-
-                    // Campo de Texto Central
                     OutlinedTextField(
-                        value = installmentsText,
-                        onValueChange = {
-                            if (it.all { char -> char.isDigit() } && it.length <= 3) {
-                                installmentsText = it
-                            }
-                        },
-                        label = { Text("Qtd") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedContainerColor = Color.Transparent
-                        )
+                        value = installmentsText, onValueChange = { if (it.all { char -> char.isDigit() } && it.length <= 3) installmentsText = it },
+                        label = { Text("Qtd") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f), singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent)
                     )
-
-                    // Botão Mais
-                    FilledTonalIconButton(
-                        onClick = {
-                            val current = installmentsText.toIntOrNull() ?: 1
-                            if (current < 999) installmentsText = (current + 1).toString()
-                        }
-                    ) {
+                    FilledTonalIconButton(onClick = { val c = installmentsText.toIntOrNull() ?: 1; if (c < 999) installmentsText = (c + 1).toString() }) {
                         Icon(Icons.Default.KeyboardArrowRight, "+")
                     }
                 }
-
-                // Mostra valor da parcela
                 val count = installmentsText.toIntOrNull() ?: 1
                 if (count > 0 && amountCents > 0) {
-                    Text(
-                        text = "Valor da parcela: ${MoneyFormatter.format(amountCents / count)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    Text(text = "Valor da parcela: ${MoneyFormatter.format(amountCents / count)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onCancel) { Text("Cancelar") }
             Spacer(modifier = Modifier.width(8.dp))
@@ -384,9 +485,7 @@ fun AddExpenseSheetContent(
                     }
                 },
                 enabled = amountCents > 0 && selectedCat != null && selectedPay != null
-            ) {
-                Text("Lançar Gasto")
-            }
+            ) { Text("Lançar Gasto") }
         }
     }
 }
@@ -417,9 +516,7 @@ fun SummaryItem(label: String, amount: Long, color: Color) {
 }
 
 @Composable
-fun CustomTopBar(month: Int, year: Int, onPrev: () -> Unit, onNext: () -> Unit, onAddCardClick: () -> Unit) {
-    var showMenu by remember { mutableStateOf(false) }
-
+fun CustomTopBar(month: Int, year: Int, onPrev: () -> Unit, onNext: () -> Unit) {
     Surface(shadowElevation = 2.dp, color = Color.White) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp).statusBarsPadding(),
@@ -434,53 +531,8 @@ fun CustomTopBar(month: Int, year: Int, onPrev: () -> Unit, onNext: () -> Unit, 
                 Text(String.format("%02d/%d", month, year), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 IconButton(onClick = onNext) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "Prox") }
             }
-            Box {
-                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Opções") }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Adicionar Cartão") },
-                        onClick = { showMenu = false; onAddCardClick() },
-                        leadingIcon = { Icon(Icons.Default.Add, null) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun RevenueCard(revenue: br.com.expensetracker.viewmodel.RevenueUI, onAddExpenseClick: () -> Unit) {
-    val totalSpent = revenue.expenses.sumOf { it.amountCents }
-    val remaining = revenue.amountCents - totalSpent
-
-    Card(elevation = CardDefaults.cardElevation(2.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(revenue.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Recebido: ${revenue.date}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                }
-                FilledTonalIconButton(onClick = onAddExpenseClick) { Icon(Icons.Default.ShoppingCart, "Novo Gasto") }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            val progress = if (revenue.amountCents > 0) totalSpent.toFloat() / revenue.amountCents else 0f
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
-                color = if (progress > 0.9f) Color.Red else MaterialTheme.colorScheme.primary, trackColor = Color.LightGray.copy(alpha = 0.5f),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column { Text("Total", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(revenue.amountCents), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
-                Column(horizontalAlignment = Alignment.End) { Text("Restante", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(remaining), fontWeight = FontWeight.SemiBold, color = if (remaining < 0) Color.Red else Color(0xFF2E7D32)) }
-            }
-            if (revenue.expenses.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("Gastos Vinculados:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                revenue.expenses.forEach { expense ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("- ${MoneyFormatter.format(expense.amountCents)}", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
+            IconButton(onClick = { /* Funcionalidades Futuras */ }) {
+                Icon(Icons.Default.MoreVert, "Opções")
             }
         }
     }

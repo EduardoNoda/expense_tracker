@@ -11,8 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-// Modelos de Dados
-data class ExpenseSimpleUi(
+data class ExpenseSimpleUI(
     val amountCents: Long,
     val categoryId: Int
 )
@@ -22,8 +21,9 @@ data class RevenueUI(
     val amountCents: Long,
     val date: String,
     val name: String,
-    val expenses: List<ExpenseSimpleUi> = emptyList()
+    val expenses: List<ExpenseSimpleUI> = emptyList()
 )
+
 data class SimpleItem(val id: Int, val name: String)
 
 data class HomeUiState(
@@ -37,7 +37,11 @@ data class HomeUiState(
     val paymentMethods: List<SimpleItem> = emptyList(),
     val isAddingRevenue: Boolean = false,
     val isAddingExpense: Boolean = false,
-    val selectedRevenueIdForExpense: Int? = null
+    val selectedRevenueIdForExpense: Int? = null,
+
+    // --- NOVOS ESTADOS DE UX ---
+    val isSelectingRevenueMode: Boolean = false,
+    val showNoRevenueWarning: Boolean = false
 )
 
 class SummaryViewModel : ViewModel() {
@@ -51,12 +55,9 @@ class SummaryViewModel : ViewModel() {
     }
 
     private fun loadAuxiliaryData() {
-        // Joga para thread de IO (Background)
         viewModelScope.launch(Dispatchers.IO) {
             val catsRaw = CoreBridge.getAllCategories()
             val paysRaw = CoreBridge.getPaymentMethods()
-
-            // Atualiza UI na thread principal (automático pelo StateFlow)
             _uiState.update {
                 it.copy(
                     categories = parseSimpleList(catsRaw),
@@ -70,7 +71,7 @@ class SummaryViewModel : ViewModel() {
         var m = _uiState.value.currentMonth + 1
         var y = _uiState.value.currentYear
         if (m > 12) { m = 1; y++ }
-        _uiState.update { it.copy(currentMonth = m, currentYear = y) }
+        _uiState.update { it.copy(currentMonth = m, currentYear = y, isSelectingRevenueMode = false) }
         loadData()
     }
 
@@ -78,7 +79,7 @@ class SummaryViewModel : ViewModel() {
         var m = _uiState.value.currentMonth - 1
         var y = _uiState.value.currentYear
         if (m < 1) { m = 12; y-- }
-        _uiState.update { it.copy(currentMonth = m, currentYear = y) }
+        _uiState.update { it.copy(currentMonth = m, currentYear = y, isSelectingRevenueMode = false) }
         loadData()
     }
 
@@ -86,7 +87,6 @@ class SummaryViewModel : ViewModel() {
         val m = _uiState.value.currentMonth
         val y = _uiState.value.currentYear
 
-        // IO Dispatcher: O segredo da fluidez
         viewModelScope.launch(Dispatchers.IO) {
             val summary = CoreBridge.getMonthSummary(m, y)
             val revRaw = CoreBridge.getRevenuesForMonth(m, y)
@@ -102,7 +102,34 @@ class SummaryViewModel : ViewModel() {
         }
     }
 
-    // --- Dialogs ---
+    // --- NOVA LÓGICA DO BOTÃO DE GASTO ---
+    fun onAddExpenseActionClicked() {
+        val currentRevenues = _uiState.value.revenues
+        when {
+            currentRevenues.isEmpty() -> {
+                // Não tem receita: Mostra aviso
+                _uiState.update { it.copy(showNoRevenueWarning = true) }
+            }
+            currentRevenues.size == 1 -> {
+                // Só tem uma: Vai direto pro formulário
+                openAddExpenseDialog(currentRevenues.first().id)
+            }
+            else -> {
+                // Tem 2 ou mais: Entra no modo de seleção
+                _uiState.update { it.copy(isSelectingRevenueMode = true) }
+            }
+        }
+    }
+
+    fun dismissNoRevenueWarning() {
+        _uiState.update { it.copy(showNoRevenueWarning = false) }
+    }
+
+    fun cancelRevenueSelection() {
+        _uiState.update { it.copy(isSelectingRevenueMode = false) }
+    }
+
+    // --- MANIPULAÇÃO DE DIALOGS E DADOS ---
     fun openAddRevenueDialog() { _uiState.update { it.copy(isAddingRevenue = true) } }
     fun closeAddRevenueDialog() { _uiState.update { it.copy(isAddingRevenue = false) } }
 
@@ -113,72 +140,60 @@ class SummaryViewModel : ViewModel() {
 
         viewModelScope.launch(Dispatchers.IO) {
             CoreBridge.addRevenueUseCase(name, amountCents, now.dayOfMonth, targetMonth, targetYear)
-            loadData() // Recarrega após inserir
+            loadData()
         }
-        closeAddRevenueDialog()
+        // REMOVIDO: closeAddRevenueDialog() - A UI fará isso suavemente agora
     }
 
     fun openAddExpenseDialog(revenueId: Int) {
-        _uiState.update { it.copy(isAddingExpense = true, selectedRevenueIdForExpense = revenueId) }
+        _uiState.update {
+            it.copy(
+                isAddingExpense = true,
+                selectedRevenueIdForExpense = revenueId,
+                isSelectingRevenueMode = false
+            )
+        }
     }
 
     fun closeAddExpenseDialog() {
         _uiState.update { it.copy(isAddingExpense = false, selectedRevenueIdForExpense = null) }
     }
 
-    // ATENÇÃO: Adicionei o parametro installments (parcelas) aqui
-    fun confirmAddExpense(amountCents: Long, catId: Int, payId: Int, installments: Int) {
-        val revId = _uiState.value.selectedRevenueIdForExpense ?: return
+    fun confirmAddExpense(revId: Int, amountCents: Long, catId: Int, payId: Int, installments: Int) {
         val targetMonth = _uiState.value.currentMonth
         val targetYear = _uiState.value.currentYear
         val now = LocalDate.now()
 
         viewModelScope.launch(Dispatchers.IO) {
-            CoreBridge.addExpenseToRevenue(
-                revId, amountCents, now.dayOfMonth, targetMonth, targetYear,
-                catId, payId, installments // Passando parcelas
-            )
+            CoreBridge.addExpenseToRevenue(revId, amountCents, now.dayOfMonth, targetMonth, targetYear, catId, payId, installments)
             loadData()
         }
-        closeAddExpenseDialog()
+        // REMOVIDO: closeAddExpenseDialog() - A UI fará isso suavemente agora
     }
 
-    // ... (Parsers continuam iguais) ...
+    fun addNewCard(name: String, closingDay: Int, dueDay: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            CoreBridge.addPaymentMethod(name, closingDay, dueDay)
+            loadAuxiliaryData()
+        }
+    }
+
+    // ... (Parsers continuam iguais)
     private fun parseRevenues(raw: String): List<RevenueUI> {
         if (raw.isEmpty()) return emptyList()
-
         return raw.split("\n").filter { it.isNotBlank() }.mapNotNull { line ->
             try {
-                // Divide Receita (0) dos Gastos (1) pelo pipe "|"
                 val mainParts = line.split("|")
                 val revenuePart = mainParts[0].split(";")
-
-                // Parse dos Gastos
                 val expensesList = if (mainParts.size > 1 && mainParts[1].isNotBlank()) {
-                    mainParts[1].split("#")
-                        .filter { it.isNotBlank() }
-                        .mapNotNull { expStr ->
-                            val expParts = expStr.split(";")
-                            if (expParts.size >= 2) {
-                                ExpenseSimpleUi(expParts[0].toLong(), expParts[1].toInt())
-                            } else null
-                        }
-                } else {
-                    emptyList()
-                }
+                    mainParts[1].split("#").filter { it.isNotBlank() }.mapNotNull { expStr ->
+                        val expParts = expStr.split(";")
+                        if (expParts.size >= 2) ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt()) else null
+                    }
+                } else emptyList()
 
-                // Cria o objeto final
-                RevenueUI(
-                    id = revenuePart[0].toInt(),
-                    amountCents = revenuePart[1].toLong(),
-                    date = revenuePart[2],
-                    name = if(revenuePart.size > 3) revenuePart[3] else "Sem Nome",
-                    expenses = expensesList
-                )
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Parse Error: $line", e)
-                null
-            }
+                RevenueUI(revenuePart[0].toInt(), revenuePart[1].toLong(), revenuePart[2], if(revenuePart.size > 3) revenuePart[3] else "Sem Nome", expensesList)
+            } catch (e: Exception) { null }
         }
     }
 
@@ -189,13 +204,6 @@ class SummaryViewModel : ViewModel() {
                 val p = it.split(";")
                 SimpleItem(p[0].toInt(), p[1])
             } catch (e: Exception) { null }
-        }
-    }
-    fun addNewCard(name: String, closingDay: Int, dueDay: Int) {
-        viewModelScope.launch(Dispatchers.IO) {
-            CoreBridge.addPaymentMethod(name, closingDay, dueDay)
-            // Recarrega as listas para o novo cartão aparecer no dropdown imediatamente
-            loadAuxiliaryData()
         }
     }
 }
