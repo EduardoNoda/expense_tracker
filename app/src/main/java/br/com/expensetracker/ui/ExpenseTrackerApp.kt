@@ -1,7 +1,14 @@
 package br.com.expensetracker.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -9,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -19,8 +27,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,15 +38,21 @@ import androidx.compose.ui.unit.dp
 import br.com.expensetracker.viewmodel.SimpleItem
 import br.com.expensetracker.viewmodel.SummaryViewModel
 import kotlinx.coroutines.launch
+import java.time.Month
+import java.time.format.TextStyle
+import java.util.Locale
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.tooling.preview.Preview
 
-// Adicione o revenueId aqui
 data class TempExpenseData(val revenueId: Int, val amount: Long, val catId: Int, val payId: Int, val installments: Int)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
     val state by viewModel.uiState.collectAsState()
 
-    // Sheets states independentes para evitar conflitos
     val revenueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val expenseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -80,11 +96,16 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
             onDismissRequest = { pendingExpenseConfirmation = null },
             title = { Text("Confirmar Despesa") },
             text = {
-                // ... texto igual ...
+                Column {
+                    Text("Deseja lançar um gasto de ${MoneyFormatter.format(data.amount)}?")
+                    if (data.installments > 1) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Parcelado em ${data.installments}x", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                }
             },
             confirmButton = {
                 Button(onClick = {
-                    // MUDANÇA: Agora passamos o data.revenueId como primeiro parâmetro!
                     viewModel.confirmAddExpense(data.revenueId, data.amount, data.catId, data.payId, data.installments)
                     pendingExpenseConfirmation = null
                 }) { Text("Confirmar") }
@@ -143,14 +164,11 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
                     }
                 },
                 onConfirm = { amount, catId, payId, installments ->
-                    // MUDANÇA: Capturamos o ID da receita ANTES de fechar o dialog
                     val currentRevId = state.selectedRevenueIdForExpense
                     if (currentRevId != null) {
                         scope.launch {
                             expenseSheetState.hide()
-                            viewModel.closeAddExpenseDialog() // Aqui ele é apagado do ViewModel
-
-                            // Mas nós guardamos ele aqui no objeto temporário!
+                            viewModel.closeAddExpenseDialog()
                             pendingExpenseConfirmation = TempExpenseData(currentRevId, amount, catId, payId, installments)
                         }
                     }
@@ -159,105 +177,211 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
         }
     }
 
+    // Variável para controlar se a animação vai para a esquerda (-1) ou direita (1)
+    var animationDirection by remember { mutableIntStateOf(1) }
+
     Scaffold(
         topBar = {
             CustomTopBar(
                 month = state.currentMonth, year = state.currentYear,
-                onPrev = { viewModel.prevMonth() }, onNext = { viewModel.nextMonth() }
+                onPrev = {
+                    animationDirection = 1 // Direção: voltando
+                    viewModel.prevMonth()
+                },
+                onNext = {
+                    animationDirection = -1 // Direção: avançando
+                    viewModel.nextMonth()
+                }
             )
         },
         floatingActionButton = {
+            // ... (SEU CÓDIGO DO FLOATING ACTION BUTTON CONTINUA EXATAMENTE IGUAL AQUI) ...
             var expandedFabMenu by remember { mutableStateOf(false) }
 
+            val rotation by animateFloatAsState(
+                targetValue = if (expandedFabMenu) 45f else 0f,
+                label = "fab_rotation"
+            )
+
             if (!state.isSelectingRevenueMode) {
-                Box(contentAlignment = Alignment.BottomEnd) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    AnimatedVisibility(
+                        visible = expandedFabMenu,
+                        enter = fadeIn() + slideInVertically(initialOffsetY = { 50 }),
+                        exit = fadeOut() + slideOutVertically(targetOffsetY = { 50 })
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        ) {
+                            FabMenuItem(
+                                text = "Novo Gasto",
+                                icon = Icons.Default.ShoppingCart,
+                                onClick = { expandedFabMenu = false; viewModel.onAddExpenseActionClicked() }
+                            )
+                            FabMenuItem(
+                                text = "Nova Receita",
+                                icon = Icons.Default.Add,
+                                onClick = { expandedFabMenu = false; viewModel.openAddRevenueDialog() },
+                                containerColor = Color(0xFFE8F5E9),
+                                tint = Color(0xFF2E7D32)
+                            )
+                            FabMenuItem(
+                                text = "Novo Cartão",
+                                icon = Icons.Default.Add,
+                                onClick = { expandedFabMenu = false; showAddCardDialog = true }
+                            )
+                        }
+                    }
+
                     FloatingActionButton(
                         onClick = { expandedFabMenu = !expandedFabMenu },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = Color.White
                     ) {
-                        Icon(Icons.Default.Add, "Adicionar")
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Menu Principal",
+                            modifier = Modifier
+                                .scale(if (expandedFabMenu) 1.2f else 1f)
+                                .rotate(rotation)
+                        )
+                    }
+                }
+            }
+        } // Fim do FAB
+    ) { padding ->
+
+        var swipeOffset by remember { mutableFloatStateOf(0f) }
+
+        // Container principal que captura o deslize do dedo
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(Color(0xFFF5F5F5))
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (swipeOffset > 60) {
+                                animationDirection = 1
+                                viewModel.prevMonth()
+                            } else if (swipeOffset < -60) {
+                                animationDirection = -1
+                                viewModel.nextMonth()
+                            }
+                            swipeOffset = 0f
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            swipeOffset += dragAmount
+                        }
+                    )
+                }
+        ) {
+            // A MÁGICA DA ANIMAÇÃO ACONTECE AQUI
+            // Ele observa a dupla (Mês, Ano). Se mudar, ele dispara a transição.
+            // A MÁGICA DA ANIMAÇÃO ACONTECE AQUI
+            AnimatedContent(
+                targetState = state, // 1. Agora passamos o estado completo da UI
+                transitionSpec = {
+                    if (animationDirection == -1) {
+                        (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
+                            slideOutHorizontally { width -> -width } + fadeOut())
+                    } else {
+                        (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(
+                            slideOutHorizontally { width -> width } + fadeOut())
+                    }
+                },
+                // 2. O Segredo: Ele só dispara a animação se a "chave" (mês/ano) mudar!
+                contentKey = { "${it.currentMonth}-${it.currentYear}" },
+                label = "MonthTransition"
+            ) { targetState ->
+                // 3. AQUI ESTAVA O ERRO! Em vez de usar '_', chamamos de 'targetState'
+                // E trocamos todos os 'state.' por 'targetState.' aqui dentro.
+
+                Column(modifier = Modifier.fillMaxSize()) {
+                    HeaderSummary(targetState.totalRevenue, targetState.totalExpense, targetState.balance)
+
+                    AnimatedVisibility(visible = targetState.isSelectingRevenueMode) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            shape = MaterialTheme.shapes.medium
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Selecione a receita que receberá o gasto", style = MaterialTheme.typography.labelLarge)
+                                IconButton(onClick = { viewModel.cancelRevenueSelection() }) {
+                                    Icon(Icons.Default.Close, "Cancelar")
+                                }
+                            }
+                        }
                     }
 
-                    DropdownMenu(
-                        expanded = expandedFabMenu,
-                        onDismissRequest = { expandedFabMenu = false },
-                        offset = androidx.compose.ui.unit.DpOffset(x = 0.dp, y = (-16).dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Receitas do Mês", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Adicionar Gasto") },
-                            onClick = {
-                                expandedFabMenu = false
-                                viewModel.onAddExpenseActionClicked()
-                            },
-                            leadingIcon = { Icon(Icons.Default.ShoppingCart, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Adicionar Receita") },
-                            onClick = {
-                                expandedFabMenu = false
-                                viewModel.openAddRevenueDialog()
-                            },
-                            leadingIcon = { Icon(Icons.Default.AttachMoney, null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Novo Cartão") },
-                            onClick = {
-                                expandedFabMenu = false
-                                showAddCardDialog = true
-                            },
-                            leadingIcon = { Icon(Icons.Default.Add, null) }
-                        )
+                        items(targetState.revenues) { revenue ->
+                            RevenueCard(
+                                revenue = revenue,
+                                isSelectingMode = targetState.isSelectingRevenueMode,
+                                onCardClick = {
+                                    if (targetState.isSelectingRevenueMode) {
+                                        viewModel.openAddExpenseDialog(revenue.id)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
-    ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).background(Color(0xFFF5F5F5))
+    }
+}
+
+// --- NOVO COMPONENTE: ITEM DO MENU FAB SEGURO ---
+@Composable
+fun FabMenuItem(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    containerColor: Color = MaterialTheme.colorScheme.secondaryContainer,
+    tint: Color = LocalContentColor.current
+) {
+    // Row com clique silencioso (sem ripple problemático) para pegar a área toda
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick
+        )
+    ) {
+        Card(
+            shape = RoundedCornerShape(8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            HeaderSummary(state.totalRevenue, state.totalExpense, state.balance)
-
-            AnimatedVisibility(visible = state.isSelectingRevenueMode) {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Selecione a receita que receberá o gasto", style = MaterialTheme.typography.labelLarge)
-                        IconButton(onClick = { viewModel.cancelRevenueSelection() }) {
-                            Icon(Icons.Default.Close, "Cancelar")
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Receitas do Mês", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp))
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(state.revenues) { revenue ->
-                    RevenueCard(
-                        revenue = revenue,
-                        isSelectingMode = state.isSelectingRevenueMode,
-                        onCardClick = {
-                            if (state.isSelectingRevenueMode) {
-                                // O usuário clicou na receita alvo, chama a ViewModel para abrir o modal de despesa.
-                                viewModel.openAddExpenseDialog(revenue.id)
-                            }
-                        }
-                    )
-                }
-            }
+            Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        SmallFloatingActionButton(
+            onClick = onClick,
+            containerColor = containerColor
+        ) {
+            Icon(icon, contentDescription = text, tint = tint)
         }
     }
 }
@@ -335,7 +459,7 @@ fun RevenueCard(
     }
 }
 
-// --- COMPONENTES AUXILIARES ---
+// --- OUTROS COMPONENTES ---
 
 @Composable
 fun AddCardDialog(onDismiss: () -> Unit, onConfirm: (String, Int, Int) -> Unit) {
@@ -365,7 +489,11 @@ fun AddCardDialog(onDismiss: () -> Unit, onConfirm: (String, Int, Int) -> Unit) 
             Button(onClick = {
                 val c = closingDay.toIntOrNull() ?: 0
                 val d = dueDay.toIntOrNull() ?: 0
-                if (name.isNotEmpty() && c in 1..31 && d in 1..31) onConfirm(name, c, d)
+                if (name.isNotBlank() && c in 1..31 && d in 1..31) {
+                    // CORREÇÃO: Mata o espaço extra e força a primeira maiúscula
+                    val cleanName = name.trim().replaceFirstChar { it.uppercase() }
+                    onConfirm(cleanName, c, d)
+                }
             }) { Text("Adicionar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
@@ -420,7 +548,16 @@ fun AddRevenueSheetContent(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onCancel) { Text("Cancelar") }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { if (name.isNotBlank() && amountCents > 0) onConfirm(name, amountCents) }, enabled = name.isNotBlank() && amountCents > 0) {
+            Button(
+                onClick = {
+                    if (name.isNotBlank() && amountCents > 0) {
+                        // CORREÇÃO: Mata o espaço extra e força a primeira maiúscula
+                        val cleanName = name.trim().replaceFirstChar { it.uppercase() }
+                        onConfirm(cleanName, amountCents)
+                    }
+                },
+                enabled = name.isNotBlank() && amountCents > 0
+            ) {
                 Text("Salvar Receita")
             }
         }
@@ -528,12 +665,48 @@ fun CustomTopBar(month: Int, year: Int, onPrev: () -> Unit, onNext: () -> Unit) 
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPrev) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Ant") }
-                Text(String.format("%02d/%d", month, year), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+
+                // MUDANÇA: Data formatada lindamente para o cliente (Ex: Fev/2026)
+                val rawMonthName = Month.of(month)
+                    .getDisplayName(TextStyle.SHORT, Locale("pt", "BR"))
+                val monthName = rawMonthName.replace(".", "").lowercase().replaceFirstChar { it.uppercase() }
+
+                Text(
+                    text = "$monthName/$year",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
                 IconButton(onClick = onNext) { Icon(Icons.AutoMirrored.Filled.ArrowForward, "Prox") }
             }
             IconButton(onClick = { /* Funcionalidades Futuras */ }) {
                 Icon(Icons.Default.MoreVert, "Opções")
             }
         }
+    }
+}
+// Isso aqui diz para o Android Studio desenhar essa função na tela lateral
+@Preview(showBackground = true, backgroundColor = 0xFFF5F5F5)
+@Composable
+fun AddExpensePreview() {
+    // 1. Criamos dados falsos só pro Preview não quebrar
+    val mockCategories = listOf(
+        SimpleItem(1, "Alimentação"), SimpleItem(2, "Transporte"),
+        SimpleItem(3, "Saúde"), SimpleItem(4, "Lazer"),
+        SimpleItem(5, "Moradia"), SimpleItem(6, "Educação"),
+        SimpleItem(7, "Supermercado"), SimpleItem(8, "Pet")
+    )
+    val mockPayments = listOf(
+        SimpleItem(1, "Dinheiro/Pix"), SimpleItem(2, "Cartão Nubank"), SimpleItem(3, "Cartão Inter")
+    )
+
+    // 2. Chamamos a nossa tela com os dados falsos
+    MaterialTheme { // Garante que as cores e fontes funcionem
+        AddExpenseSheetContent(
+            categories = mockCategories,
+            paymentMethods = mockPayments,
+            onCancel = {},
+            onConfirm = { _, _, _, _ -> }
+        )
     }
 }
