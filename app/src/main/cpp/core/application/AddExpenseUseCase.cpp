@@ -33,7 +33,7 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, Date initi
     PaymentMethod paymentMethod = paymentMethodRepository.findById(paymentMethodId);
     if (!paymentMethod.isCredit()) installments = 1;
 
-    // 2. Cálculo do valor da parcela (sem centavos perdidos no MVP)
+    // 2. Cálculo do valor da parcela
     long long totalCents = money.getCents();
     long long installmentCents = totalCents / installments;
     Money installmentMoney(installmentCents);
@@ -44,33 +44,37 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, Date initi
 
     // 3. Loop de Parcelas
     for (int i = 0; i < installments; i++) {
-        // Data base da parcela 'i' (ex: compra hoje, parcela 2 é hoje + 1 mês)
+        // Data base da parcela 'i'
         Date currentInstallmentDate = addMonths(date, i);
-
         Date finalImpactDate = currentInstallmentDate;
 
-        // 4. Regra de Cartão de Crédito
+        // 4. REGRA DEFINITIVA DE CARTÃO DE CRÉDITO
         if (paymentMethod.isCredit()) {
             int closingDay = paymentMethod.getClosingDay();
             int dueDay = paymentMethod.getDueDay();
+            int monthOffset = 0;
 
-            // Se a compra (ou a parcela virtual) cair depois do fechamento, joga pro mês seguinte
-            if (currentInstallmentDate.getDay() > closingDay) {
-                // Avança 1 mês no vencimento
-                finalImpactDate = addMonths(currentInstallmentDate, 1);
-                // Fixa o dia no dia de vencimento
-                finalImpactDate = Date(dueDay, finalImpactDate.getMonth(), finalImpactDate.getYear());
-            } else {
-                // Cai no mesmo mês, mas no dia do vencimento
-                finalImpactDate = Date(dueDay, currentInstallmentDate.getMonth(), currentInstallmentDate.getYear());
+            // Regra A: Comprou no dia do fechamento ou depois? A fatura pulou.
+            if (currentInstallmentDate.getDay() >= closingDay) {
+                monthOffset += 1;
             }
+
+            // Regra B: O vencimento é antes do fechamento? (Ex: Fecha 25, Vence 05)
+            // Significa que o vencimento naturalmente cai no mês calendário seguinte.
+            if (dueDay < closingDay) {
+                monthOffset += 1;
+            }
+
+            // Aplica os meses de "pulo" e seta o dia do vencimento exato
+            Date targetMonthDate = addMonths(currentInstallmentDate, monthOffset);
+            finalImpactDate = Date(dueDay, targetMonthDate.getMonth(), targetMonthDate.getYear());
         }
 
-        Expense expense(revenueId,installmentMoney, currentInstallmentDate, finalImpactDate, categoryId, paymentMethodId);
+        Expense expense(revenueId, installmentMoney, currentInstallmentDate, finalImpactDate, categoryId, paymentMethodId);
         lastId = expenseRepository.save(revenueId, expense);
 
         __android_log_print(ANDROID_LOG_INFO, "CORE_LOGIC",
-                            "Parcela %d/%d | Data Base: %s | Vencimento: %s",
+                            "Parcela %d/%d | Compra: %s | Vencimento (Impacto): %s",
                             i+1, installments, currentInstallmentDate.toISO().c_str(), finalImpactDate.toISO().c_str());
     }
     expenseRepository.commitTransaction();
