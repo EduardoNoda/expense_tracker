@@ -45,6 +45,19 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 data class TempExpenseData(val revenueId: Int, val amount: Long, val catId: Int, val payId: Int, val installments: Int)
 
@@ -399,29 +412,16 @@ fun RevenueCard(
     val scale = if (isSelectingMode) {
         val infiniteTransition = rememberInfiniteTransition(label = "pulse_transition")
         infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 1.03f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(600, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
+            initialValue = 1f, targetValue = 1.03f,
+            animationSpec = infiniteRepeatable(animation = tween(600, easing = FastOutSlowInEasing), repeatMode = RepeatMode.Reverse),
             label = "PulsingCard"
         ).value
     } else 1f
 
-    val baseModifier = Modifier
-        .fillMaxWidth()
-        .scale(scale)
-
+    val baseModifier = Modifier.fillMaxWidth().scale(scale)
     val finalModifier = if (isSelectingMode) {
-        baseModifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            onClick = onCardClick
-        )
-    } else {
-        baseModifier
-    }
+        baseModifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onCardClick)
+    } else baseModifier
 
     Card(
         elevation = CardDefaults.cardElevation(if (isSelectingMode) 8.dp else 2.dp),
@@ -436,22 +436,48 @@ fun RevenueCard(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+
             val progress = if (revenue.amountCents > 0) totalSpent.toFloat() / revenue.amountCents else 0f
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
                 color = if (progress > 0.9f) Color.Red else MaterialTheme.colorScheme.primary, trackColor = Color.LightGray.copy(alpha = 0.5f),
             )
+
             Spacer(modifier = Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column { Text("Total", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(revenue.amountCents), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
+                Column { Text("Total Gasto", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(totalSpent), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary) }
                 Column(horizontalAlignment = Alignment.End) { Text("Restante", style = MaterialTheme.typography.bodySmall); Text(MoneyFormatter.format(remaining), fontWeight = FontWeight.SemiBold, color = if (remaining < 0) Color.Red else Color(0xFF2E7D32)) }
             }
+
             if (revenue.expenses.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("Gastos Vinculados:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                revenue.expenses.forEach { expense ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("- ${MoneyFormatter.format(expense.amountCents)}", style = MaterialTheme.typography.bodyMedium)
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                // MÁGICA AQUI: Separamos a lista em duas! (Supondo que payId 1 é Dinheiro/Pix/Débito)
+                val aVista = revenue.expenses.filter { it.payId <= 1 }
+                val noCredito = revenue.expenses.filter { it.payId > 1 }
+
+                if (aVista.isNotEmpty()) {
+                    Text("À Vista (Pix/Débito):", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    aVista.forEach { expense ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("- Categoria ${expense.categoryId}", style = MaterialTheme.typography.bodyMedium) // Aqui você pode pôr o nome da categoria no futuro
+                            Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                if (noCredito.isNotEmpty()) {
+                    Text("Faturas de Cartão (Crédito):", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    noCredito.forEach { expense ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Cat ${expense.categoryId}", style = MaterialTheme.typography.bodyMedium)
+                            }
+                            Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = Color(0xFFE65100)) // Laranjinha pra destacar dívida
+                        }
                     }
                 }
             }
@@ -531,32 +557,80 @@ fun AddRevenueSheetContent(
     var name by remember { mutableStateOf("") }
     var amountCents by remember { mutableLongStateOf(0L) }
 
+    var textFieldValue by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Nova Receita", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Valor da Receita", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+
+        TextField(
+            value = textFieldValue,
+            onValueChange = { newValue ->
+                val digits = newValue.text.filter { it.isDigit() }
+                amountCents = if (digits.isEmpty()) 0L else digits.toLong()
+
+                val formattedText = if (amountCents == 0L) {
+                    ""
+                } else {
+                    val reais = amountCents / 100
+                    val centavos = amountCents % 100
+                    val reaisFormatado = "%,d".format(java.util.Locale("pt", "BR"), reais)
+                    "R$ $reaisFormatado,%02d".format(centavos)
+                }
+
+                textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                    text = formattedText,
+                    selection = androidx.compose.ui.text.TextRange(formattedText.length)
+                )
+            },
+            textStyle = MaterialTheme.typography.displayMedium.copy(
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2E7D32)
+            ),
+            placeholder = {
+                Text("R$ 0,00", style = MaterialTheme.typography.displayMedium, color = Color.LightGray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
-            value = name, onValueChange = { name = it }, label = { Text("Descrição (ex: Salário)") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Descrição (ex: Salário, Freela)") },
+            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = Color.Gray) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
         )
-        MoneyInput(valueCents = amountCents, onValueChange = { amountCents = it }, label = "Valor da Receita", modifier = Modifier.fillMaxWidth())
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onCancel) { Text("Cancelar") }
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = {
                     if (name.isNotBlank() && amountCents > 0) {
-                        // CORREÇÃO: Mata o espaço extra e força a primeira maiúscula
                         val cleanName = name.trim().replaceFirstChar { it.uppercase() }
                         onConfirm(cleanName, amountCents)
                     }
                 },
-                enabled = name.isNotBlank() && amountCents > 0
+                enabled = name.isNotBlank() && amountCents > 0,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
             ) {
                 Text("Salvar Receita")
             }
@@ -564,6 +638,20 @@ fun AddRevenueSheetContent(
     }
 }
 
+// --- PREVIEW DA RECEITA ---
+// Use o painel Split/Design do Android Studio para ver como ficou
+@Preview(showBackground = true, backgroundColor = 0xFFF5F5F5)
+@Composable
+fun AddRevenuePreview() {
+    MaterialTheme {
+        AddRevenueSheetContent(
+            onCancel = {},
+            onConfirm = { _, _ -> }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddExpenseSheetContent(
     categories: List<SimpleItem>,
@@ -576,53 +664,208 @@ fun AddExpenseSheetContent(
     var selectedPay by remember { mutableStateOf<SimpleItem?>(null) }
     var installmentsText by remember { mutableStateOf("1") }
 
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text("Adicionar Despesa", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    var textFieldValue by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
 
-        MoneyInput(valueCents = amountCents, onValueChange = { amountCents = it }, label = "Valor Total", modifier = Modifier.fillMaxWidth())
-        AppDropdown(label = "Categoria", items = categories, selectedItem = selectedCat, onItemSelected = { selectedCat = it })
-        AppDropdown(label = "Forma de Pagamento", items = paymentMethods, selectedItem = selectedPay, onItemSelected = { selectedPay = it })
+    var currentView by remember { mutableStateOf("FORM") }
+    val focusManager = LocalFocusManager.current
 
-        if (selectedPay != null && selectedPay!!.id > 1) {
-            Column {
-                Text("Parcelamento", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalIconButton(onClick = { val c = installmentsText.toIntOrNull() ?: 1; if (c > 1) installmentsText = (c - 1).toString() }) {
-                        Icon(Icons.Default.KeyboardArrowLeft, "-")
-                    }
-                    OutlinedTextField(
-                        value = installmentsText, onValueChange = { if (it.all { char -> char.isDigit() } && it.length <= 3) installmentsText = it },
-                        label = { Text("Qtd") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f), singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.Transparent, focusedContainerColor = Color.Transparent)
+    Crossfade(targetState = currentView, label = "ExpenseViewTransition") { view ->
+        when (view) {
+            "FORM" -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp).navigationBarsPadding(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Valor do Gasto", style = MaterialTheme.typography.labelLarge, color = Color.Gray)
+
+                    TextField(
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            val digits = newValue.text.filter { it.isDigit() }
+                            amountCents = if (digits.isEmpty()) 0L else digits.toLong()
+
+                            val formattedText = if (amountCents == 0L) {
+                                ""
+                            } else {
+                                val reais = amountCents / 100
+                                val centavos = amountCents % 100
+                                val reaisFormatado = "%,d".format(java.util.Locale("pt", "BR"), reais)
+                                "R$ $reaisFormatado,%02d".format(centavos)
+                            }
+
+                            textFieldValue = androidx.compose.ui.text.input.TextFieldValue(
+                                text = formattedText,
+                                selection = androidx.compose.ui.text.TextRange(formattedText.length)
+                            )
+                        },
+                        textStyle = MaterialTheme.typography.displayMedium.copy(
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        ),
+                        placeholder = { Text("R$ 0,00", style = MaterialTheme.typography.displayMedium, color = Color.LightGray, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
                     )
-                    FilledTonalIconButton(onClick = { val c = installmentsText.toIntOrNull() ?: 1; if (c < 999) installmentsText = (c + 1).toString() }) {
-                        Icon(Icons.Default.KeyboardArrowRight, "+")
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Surface(
+                            onClick = {
+                                focusManager.clearFocus()
+                                currentView = "CATEGORY"
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (selectedCat != null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.weight(1f).height(56.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Icon(Icons.Default.Sell, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = selectedCat?.name ?: "Categoria", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                            }
+                        }
+
+                        Surface(
+                            onClick = {
+                                focusManager.clearFocus()
+                                currentView = "PAYMENT"
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (selectedPay != null) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.weight(1f).height(56.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(text = selectedPay?.name ?: "Pagamento", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                            }
+                        }
                     }
-                }
-                val count = installmentsText.toIntOrNull() ?: 1
-                if (count > 0 && amountCents > 0) {
-                    Text(text = "Valor da parcela: ${MoneyFormatter.format(amountCents / count)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    AnimatedVisibility(visible = selectedPay != null && selectedPay!!.id > 1) {
+                        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Parcelamento", style = MaterialTheme.typography.labelLarge)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { val c = installmentsText.toIntOrNull() ?: 1; if (c > 1) installmentsText = (c - 1).toString() }) { Icon(Icons.Default.KeyboardArrowLeft, "-") }
+                                    Text(text = "${installmentsText}x", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    IconButton(onClick = { val c = installmentsText.toIntOrNull() ?: 1; if (c < 999) installmentsText = (c + 1).toString() }) { Icon(Icons.Default.KeyboardArrowRight, "+") }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = onCancel) { Text("Cancelar") }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val finalInstallments = installmentsText.toIntOrNull() ?: 1
+                                if (amountCents > 0 && selectedCat != null && selectedPay != null && finalInstallments > 0) {
+                                    onConfirm(amountCents, selectedCat!!.id, selectedPay!!.id, finalInstallments)
+                                }
+                            },
+                            enabled = amountCents > 0 && selectedCat != null && selectedPay != null
+                        ) { Text("Lançar Gasto") }
+                    }
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onCancel) { Text("Cancelar") }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    val finalInstallments = installmentsText.toIntOrNull() ?: 1
-                    if (amountCents > 0 && selectedCat != null && selectedPay != null && finalInstallments > 0) {
-                        onConfirm(amountCents, selectedCat!!.id, selectedPay!!.id, finalInstallments)
+            // TELA INTERNA: CATEGORIAS (Corrigida com altura máxima para não travar)
+            "CATEGORY" -> {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = { currentView = "FORM" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+                        Text("Selecione a Categoria", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
-                },
-                enabled = amountCents > 0 && selectedCat != null && selectedPay != null
-            ) { Text("Lançar Gasto") }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        // AQUI ESTÁ A MÁGICA: Limita a altura para o BottomSheet não surtar
+                        modifier = Modifier.heightIn(max = 400.dp)
+                    ) {
+                        items(categories) { cat ->
+                            Surface(
+                                onClick = { selectedCat = cat; currentView = "FORM" },
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.aspectRatio(1f)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Sell, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(cat.name, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 2)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // TELA INTERNA: PAGAMENTOS (Corrigida sem LazyColumn)
+            "PAYMENT" -> {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = { currentView = "FORM" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+                        Text("Forma de Pagamento", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(vertical = 16.dp)
+                    ) {
+                        paymentMethods.forEach { pay ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    // MUDANÇA AQUI: Clique seguro sem Ripple para não dar o erro do PlatformRipple
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {
+                                            selectedPay = pay
+                                            currentView = "FORM"
+                                        }
+                                    )
+                                    .padding(vertical = 16.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CreditCard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text(pay.name, style = MaterialTheme.typography.bodyLarge)
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
         }
     }
 }
