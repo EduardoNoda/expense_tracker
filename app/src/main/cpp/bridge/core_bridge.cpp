@@ -37,12 +37,12 @@ std::string serializeCursor(sqlite3_stmt* stmt, int colCount) {
 static void ensureSchema(Database& db) {
     db.exec("PRAGMA foreign_keys = ON;");
 
-    db.exec(R"(
+    /*db.exec(R"(
     DROP TABLE IF EXISTS expenses;
     DROP TABLE IF EXISTS revenues;
     DROP TABLE IF EXISTS payment_methods;
     DROP TABLE IF EXISTS categories;
-    )");
+    )");*/
 
     db.exec(R"(
     CREATE TABLE IF NOT EXISTS categories (
@@ -55,7 +55,7 @@ static void ensureSchema(Database& db) {
     CREATE TABLE IF NOT EXISTS payment_methods (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('IMMEDIATE','CREDIT')),
+        type TEXT NOT NULL CHECK (type IN ('IMMEDIATE', 'CREDIT')),
         closing_day INTEGER CHECK (closing_day IS NULL OR closing_day BETWEEN 1 AND 31),
         due_day INTEGER CHECK (due_day IS NULL OR due_day BETWEEN 1 AND 31)
     );
@@ -89,12 +89,113 @@ static void ensureSchema(Database& db) {
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO categories (id, name) VALUES (1, 'Geral');
+    INSERT OR IGNORE INTO categories (id, name) VALUES (1, 'Academia');
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Impacto Imediato', 'IMMEDIATE')
+    INSERT OR IGNORE INTO categories (id, name) VALUES (2, 'Barbeiro');
     )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (3, 'Bares e Restaurantes');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (4, 'Cartão de Crédito');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (5, 'Combustível');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (6, 'Condomínio');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (7, 'Diarista');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (8, 'Energia');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (9, 'Entretenimento');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (10, 'Farmácia');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (11, 'IPTU');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (12, 'IPVA');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (13, 'Manutenção da Casa');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (14, 'Manutenção do Veículo');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (15, 'Mercado');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (16, 'Padaria');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (17, 'Parcela do Veículo');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (18, 'Pet');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (19, 'Plano de Saúde');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (20, 'Prestação da Casa');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (21, 'Salão');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (22, 'Saneamento');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (23, 'Seguro');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO categories (id, name) VALUES (24, 'Outros');
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Pix', 'IMMEDIATE')
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Dinheiro', 'IMMEDIATE')
+    )");
+
+    db.exec(R"(
+    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Débito', 'IMMEDIATE')
+    )");
+
 
 
     sqlite3_stmt* stmt;
@@ -210,8 +311,11 @@ Java_br_com_expensetracker_bridge_CoreBridge_getRevenuesForMonth(JNIEnv *env, jo
                << r.getName() << "|"; // Pipe separador
 
             // 2. Dados das Despesas (Isso estava faltando no seu código enviado)
+            // 2. Dados das Despesas (Agora enviando Valor, Categoria E Forma de Pagamento)
             for (const auto &e : r.getExpenses()) {
-                ss << e.getAmount().getCents() << ";" << e.getCategoryId() << "#";
+                ss << e.getAmount().getCents() << ";"
+                   << e.getCategoryId() << ";"
+                   << e.getPaymentMethodId() << "#";
             }
 
             ss << "\n";
