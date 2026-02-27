@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.window.Dialog
 
 data class TempExpenseData(val revenueId: Int, val amount: Long, val catId: Int, val payId: Int, val installments: Int)
 
@@ -346,9 +347,14 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
                         contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(targetState.revenues) { revenue ->
+                        items(
+                            items = targetState.revenues,
+                            key = { revenue -> revenue.id }
+                        ) { revenue ->
                             RevenueCard(
                                 revenue = revenue,
+                                categories = targetState.categories,
+                                paymentMethods = targetState.paymentMethods, // <--- ADICIONE ESTA LINHA AQUI
                                 isSelectingMode = targetState.isSelectingRevenueMode,
                                 onCardClick = {
                                     if (targetState.isSelectingRevenueMode) {
@@ -403,6 +409,8 @@ fun FabMenuItem(
 @Composable
 fun RevenueCard(
     revenue: br.com.expensetracker.viewmodel.RevenueUI,
+    categories: List<SimpleItem>,
+    paymentMethods: List<SimpleItem>, // NOVO: Recebendo os pagamentos
     isSelectingMode: Boolean,
     onCardClick: () -> Unit
 ) {
@@ -450,33 +458,52 @@ fun RevenueCard(
             }
 
             if (revenue.expenses.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                var isExpanded by remember { mutableStateOf(false) }
 
-                // MÁGICA AQUI: Separamos a lista em duas! (Supondo que payId 1 é Dinheiro/Pix/Débito)
-                val aVista = revenue.expenses.filter { it.payId <= 1 }
-                val noCredito = revenue.expenses.filter { it.payId > 1 }
+                HorizontalDivider(modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
 
-                if (aVista.isNotEmpty()) {
-                    Text("À Vista (Pix/Débito):", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    aVista.forEach { expense ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("- Categoria ${expense.categoryId}", style = MaterialTheme.typography.bodyMedium) // Aqui você pode pôr o nome da categoria no futuro
-                            Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
+                // BOTÃO DE EXPANDIR/RECUAR
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null // Sem ondinha para não conflitar com a seleção
+                        ) { isExpanded = !isExpanded }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isExpanded) "Ocultar Lançamentos" else "Exibir Lançamentos",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
 
-                if (noCredito.isNotEmpty()) {
-                    Text("Faturas de Cartão (Crédito):", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                    noCredito.forEach { expense ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CreditCard, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Cat ${expense.categoryId}", style = MaterialTheme.typography.bodyMedium)
+                // A LISTA FICA ESCONDIDA AQUI DENTRO
+                AnimatedVisibility(visible = isExpanded) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        val groupedExpenses = revenue.expenses.groupBy { it.payId }
+
+                        groupedExpenses.forEach { (payId, expensesList) ->
+                            val payName = paymentMethods.find { it.id == payId }?.name ?: "Outros Pagamentos"
+
+                            Text("$payName:", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+
+                            expensesList.forEach { expense ->
+                                val catName = categories.find { it.id == expense.categoryId }?.name ?: "Outros"
+                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("- $catName", style = MaterialTheme.typography.bodyMedium)
+                                    Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                }
                             }
-                            Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = Color(0xFFE65100)) // Laranjinha pra destacar dívida
+                            Spacer(modifier = Modifier.height(8.dp))
                         }
                     }
                 }
@@ -489,40 +516,88 @@ fun RevenueCard(
 
 @Composable
 fun AddCardDialog(onDismiss: () -> Unit, onConfirm: (String, Int, Int) -> Unit) {
-    var name by remember { mutableStateOf("") }
+    var cardName by remember { mutableStateOf("") }
     var closingDay by remember { mutableStateOf("") }
     var dueDay by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Novo Cartão de Crédito") },
+        shape = RoundedCornerShape(16.dp), // Borda mais suave e moderna
+        title = {
+            Text(
+                text = "Novo Cartão",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nome (ex: Nubank)") })
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // NOME DO CARTÃO
+                OutlinedTextField(
+                    value = cardName,
+                    onValueChange = { cardName = it },
+                    label = { Text("Nome (ex: Nubank)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words, // Letra Maiúscula!
+                        keyboardType = KeyboardType.Text
+                    )
+                )
+
+                // DIAS LADO A LADO (Sem ícones para não espremer o texto)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     OutlinedTextField(
-                        value = closingDay, onValueChange = { if(it.length <= 2) closingDay = it.filter { c->c.isDigit() } },
-                        label = { Text("Fecha dia") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        value = closingDay,
+                        onValueChange = { if(it.length <= 2) closingDay = it.filter { c -> c.isDigit() } },
+                        label = { Text("Fecha dia") }, // Texto curto para não quebrar
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                     OutlinedTextField(
-                        value = dueDay, onValueChange = { if(it.length <= 2) dueDay = it.filter { c->c.isDigit() } },
-                        label = { Text("Vence dia") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        value = dueDay,
+                        onValueChange = { if(it.length <= 2) dueDay = it.filter { c -> c.isDigit() } },
+                        label = { Text("Vence dia") }, // Texto curto para não quebrar
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                 }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                val c = closingDay.toIntOrNull() ?: 0
-                val d = dueDay.toIntOrNull() ?: 0
-                if (name.isNotBlank() && c in 1..31 && d in 1..31) {
-                    // CORREÇÃO: Mata o espaço extra e força a primeira maiúscula
-                    val cleanName = name.trim().replaceFirstChar { it.uppercase() }
-                    onConfirm(cleanName, c, d)
-                }
-            }) { Text("Adicionar") }
+            val isFormValid = cardName.isNotBlank() &&
+                    (closingDay.toIntOrNull() ?: 0) in 1..31 &&
+                    (dueDay.toIntOrNull() ?: 0) in 1..31
+
+            Button(
+                onClick = {
+                    if (isFormValid) {
+                        val cleanName = cardName.trim().replaceFirstChar { it.uppercase() }
+                        onConfirm(cleanName, closingDay.toInt(), dueDay.toInt())
+                    }
+                },
+                enabled = isFormValid,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Adicionar")
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = Color.Gray)
+            }
+        }
     )
 }
 
@@ -757,7 +832,7 @@ fun AddExpenseSheetContent(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    AnimatedVisibility(visible = selectedPay != null && selectedPay!!.id > 1) {
+                    AnimatedVisibility(visible = selectedPay != null && selectedPay!!.id > 3) {
                         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -792,23 +867,58 @@ fun AddExpenseSheetContent(
             }
 
             // TELA INTERNA: CATEGORIAS (Corrigida com altura máxima para não travar)
+            // TELA INTERNA: CATEGORIAS (AGORA COM BUSCA)
             "CATEGORY" -> {
+                // Estado da busca
+                var searchQuery by remember { mutableStateOf("") }
+
+                // Filtra a lista em tempo real ignorando maiúsculas/minúsculas
+                val filteredCategories = categories.filter {
+                    it.name.contains(searchQuery, ignoreCase = true)
+                }
+
                 Column(modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding()) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        IconButton(onClick = { currentView = "FORM" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
+                        IconButton(onClick = {
+                            currentView = "FORM"
+                            searchQuery = "" // Limpa a busca ao voltar
+                        }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Voltar") }
                         Text("Selecione a Categoria", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
+
+                    // BARRA DE PESQUISA
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Buscar categoria...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Limpar")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // O GRID AGORA LÊ A LISTA FILTRADA
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
-                        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
-                        // AQUI ESTÁ A MÁGICA: Limita a altura para o BottomSheet não surtar
                         modifier = Modifier.heightIn(max = 400.dp)
                     ) {
-                        items(categories) { cat ->
+                        items(filteredCategories) { cat ->
                             Surface(
-                                onClick = { selectedCat = cat; currentView = "FORM" },
+                                onClick = {
+                                    selectedCat = cat
+                                    currentView = "FORM"
+                                    searchQuery = "" // Limpa a busca após selecionar
+                                },
                                 shape = RoundedCornerShape(12.dp),
                                 color = MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier.aspectRatio(1f)
