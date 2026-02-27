@@ -185,15 +185,15 @@ static void ensureSchema(Database& db) {
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Pix', 'IMMEDIATE')
+    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (1, 'Pix', 'IMMEDIATE')
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Dinheiro', 'IMMEDIATE')
+    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (2, 'Dinheiro', 'IMMEDIATE')
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Débito', 'IMMEDIATE')
+    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (3, 'Débito', 'IMMEDIATE')
     )");
 
 
