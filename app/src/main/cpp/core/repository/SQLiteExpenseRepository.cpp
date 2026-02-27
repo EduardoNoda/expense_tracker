@@ -37,11 +37,11 @@ std::vector<Expense> SQLiteExpenseRepository::findByRevenue(int revenueId) {
     sqlite3_bind_int(stmt, 1, revenueId);
 
     while(sqlite3_step(stmt) == SQLITE_ROW) {
-        long long amountCents = sqlite3_column_int64(stmt, 0);
-        std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt,1));
-        std::string impactDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt,2));
-        int categoryId = sqlite3_column_int(stmt,3);
-        int paymentMethodId = sqlite3_column_int(stmt,4);
+        long long amountCents = sqlite3_column_int64(stmt, 1);
+        std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt,2));
+        std::string impactDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt,3));
+        int categoryId = sqlite3_column_int(stmt,4);
+        int paymentMethodId = sqlite3_column_int(stmt,5);
         
         Expense expense (revenueId, Money(amountCents), Date::fromISO(dateISO), Date::fromISO(impactDate),categoryId, paymentMethodId);
 
