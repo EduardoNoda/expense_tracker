@@ -13,7 +13,8 @@ import java.time.LocalDate
 
 data class ExpenseSimpleUI(
     val amountCents: Long,
-    val categoryId: Int
+    val categoryId: Int,
+    val payId: Int
 )
 
 data class RevenueUI(
@@ -188,11 +189,23 @@ class SummaryViewModel : ViewModel() {
                 val expensesList = if (mainParts.size > 1 && mainParts[1].isNotBlank()) {
                     mainParts[1].split("#").filter { it.isNotBlank() }.mapNotNull { expStr ->
                         val expParts = expStr.split(";")
-                        if (expParts.size >= 2) ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt()) else null
+                        // AGORA SIM: Lê Valor, Categoria e payId
+                        if (expParts.size >= 3) {
+                            ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt(), expParts[2].toInt())
+                        } else if (expParts.size >= 2) {
+                            // Segurança: Se for um dado antigo sem payId, assume que é 1 (Pix/Dinheiro)
+                            ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt(), 1)
+                        } else null
                     }
                 } else emptyList()
 
-                RevenueUI(revenuePart[0].toInt(), revenuePart[1].toLong(), revenuePart[2], if(revenuePart.size > 3) revenuePart[3] else "Sem Nome", expensesList)
+                RevenueUI(
+                    id = revenuePart[0].toInt(),
+                    amountCents = revenuePart[1].toLong(),
+                    date = revenuePart[2],
+                    name = if(revenuePart.size > 3) revenuePart[3] else "Sem Nome",
+                    expenses = expensesList
+                )
             } catch (e: Exception) { null }
         }
     }
