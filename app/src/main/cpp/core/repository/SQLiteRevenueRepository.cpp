@@ -22,6 +22,15 @@ int SQLiteRevenueRepository::save(const Revenue& revenue) {
 
     return sqlite3_last_insert_rowid(database.get());
 }
+void SQLiteRevenueRepository::deleteById(int revenueId) {
+    const char* sql = "DELETE FROM revenues WHERE id = ?;";
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
+    sqlite3_bind_int(stmt, 1, revenueId);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
 
 std::vector<Revenue> SQLiteRevenueRepository::findByMonth(int month, int year) {
     std::vector<Revenue> revenues;
