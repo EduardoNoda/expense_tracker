@@ -95,26 +95,6 @@ static void ensureSchema(Database& db) {
     db.exec(R"(
     INSERT OR IGNORE INTO payment_methods(name, type) VALUES ('Impacto Imediato', 'IMMEDIATE')
     )");
-
-
-    sqlite3_stmt* stmt;
-    sqlite3_prepare_v2(db.get(), "SELECT COUNT(*) FROM payment_methods;", -1, &stmt, nullptr);
-    sqlite3_step(stmt);
-    int count = sqlite3_column_int(stmt, 0);
-    sqlite3_finalize(stmt);
-
-    LOGI("Payment methods count after ensureSchema: %d", count);
-
-    sqlite3_prepare_v2(db.get(),
-                       "SELECT sql FROM sqlite_master WHERE name='payment_methods';",
-                       -1, &stmt, nullptr);
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        const char* schema = (const char*)sqlite3_column_text(stmt, 0);
-        LOGI("PAYMENT_METHODS SCHEMA: %s", schema);
-    }
-    sqlite3_finalize(stmt);
-
 }
 
 extern "C"
@@ -294,4 +274,22 @@ Java_br_com_expensetracker_bridge_CoreBridge_addPaymentMethod(JNIEnv *env, jobje
         LOGI("Error adding card: %s", e.what());
     }
     env->ReleaseStringUTFChars(name, nameCStr);
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_deleteExpenseById(JNIEnv *env, jobject thiz,
+                                                               jint expense_id) {
+    if(expenseRepository == nullptr) return;
+    int id = static_cast<int>(expense_id);
+
+    expenseRepository->deleteById(id);
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_deleteRevenueById(JNIEnv *env, jobject thiz,
+                                                               jint revenue_id) {
+    if(revenueRepository == nullptr) return;
+
+    int id = static_cast<int>(revenue_id);
+    revenueRepository->deleteById(id);
 }

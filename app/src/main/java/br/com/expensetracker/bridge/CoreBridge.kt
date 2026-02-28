@@ -19,7 +19,8 @@ object CoreBridge {
         paymentMethodId: Int,
         installments: Int
     )
-
+    external fun deleteExpenseById(expenseId: Int)
+    external fun deleteRevenueById(revenueId: Int)
     external fun getAllCategories(): String
     external fun getPaymentMethods(): String
     external fun addPaymentMethod(name: String, closingDay: Int, dueDay: Int)
