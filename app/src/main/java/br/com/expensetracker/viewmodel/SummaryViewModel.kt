@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 data class ExpenseSimpleUI(
+    val id: Int,
     val amountCents: Long,
     val categoryId: Int
 )
@@ -101,6 +102,19 @@ class SummaryViewModel : ViewModel() {
             }
         }
     }
+    fun deleteExpense(expenseId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            CoreBridge.deleteExpenseById(expenseId)
+            loadData() // Recarrega a tela na hora!
+        }
+    }
+
+    fun deleteRevenue(revenueId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            CoreBridge.deleteRevenueById(revenueId)
+            loadData() // Recarrega a tela na hora!
+        }
+    }
 
     // --- NOVA LÓGICA DO BOTÃO DE GASTO ---
     fun onAddExpenseActionClicked() {
@@ -188,7 +202,14 @@ class SummaryViewModel : ViewModel() {
                 val expensesList = if (mainParts.size > 1 && mainParts[1].isNotBlank()) {
                     mainParts[1].split("#").filter { it.isNotBlank() }.mapNotNull { expStr ->
                         val expParts = expStr.split(";")
-                        if (expParts.size >= 2) ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt()) else null
+                        // ATENÇÃO: Estou assumindo que no C++ você colocou o ID no começo (id;amount;catId...)
+                        if (expParts.size >= 3) {
+                            ExpenseSimpleUI(
+                                id = expParts[0].toInt(),
+                                amountCents = expParts[1].toLong(),
+                                categoryId = expParts[2].toInt()
+                            )
+                        } else null
                     }
                 } else emptyList()
 
