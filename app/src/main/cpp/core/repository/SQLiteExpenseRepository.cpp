@@ -82,6 +82,17 @@ std::vector<Expense> SQLiteExpenseRepository::findByImpactMonth(int month, int y
     sqlite3_finalize(stmt);
     return expenses;
 }
+void SQLiteExpenseRepository::deleteById(int expenseId) {
+    const char* sql = "DELETE FROM expenses WHERE id = ?;";
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
+
+    sqlite3_bind_int(stmt, 1, expenseId);
+
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+}
 void SQLiteExpenseRepository::beginTransaction() {
     database.beginTransaction();
 }
