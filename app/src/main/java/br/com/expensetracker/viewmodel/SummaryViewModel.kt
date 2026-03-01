@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+enum class TimelineFilter { TODOS, RECEITAS, GASTOS, A_PRAZO, A_VISTA }
 data class ExpenseSimpleUI(
+    val id: Int,
     val amountCents: Long,
     val categoryId: Int,
     val payId: Int
@@ -42,7 +44,10 @@ data class HomeUiState(
 
     // --- NOVOS ESTADOS DE UX ---
     val isSelectingRevenueMode: Boolean = false,
-    val showNoRevenueWarning: Boolean = false
+    val showNoRevenueWarning: Boolean = false,
+
+    val showSummaryTimeline: Boolean = false,
+    val timelineFilter: TimelineFilter = TimelineFilter.TODOS
 )
 
 class SummaryViewModel : ViewModel() {
@@ -55,6 +60,10 @@ class SummaryViewModel : ViewModel() {
         loadData()
     }
 
+    // --- CONTROLE DA LINHA DO TEMPO ---
+    fun openSummaryTimeline() { _uiState.update { it.copy(showSummaryTimeline = true) } }
+    fun closeSummaryTimeline() { _uiState.update { it.copy(showSummaryTimeline = false, timelineFilter = TimelineFilter.TODOS) } }
+    fun setTimelineFilter(filter: TimelineFilter) { _uiState.update { it.copy(timelineFilter = filter) } }
     private fun loadAuxiliaryData() {
         viewModelScope.launch(Dispatchers.IO) {
             val catsRaw = CoreBridge.getAllCategories()
@@ -100,6 +109,19 @@ class SummaryViewModel : ViewModel() {
                     revenues = parseRevenues(revRaw)
                 )
             }
+        }
+    }
+    fun deleteExpense(expenseId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            CoreBridge.deleteExpenseById(expenseId)
+            loadData() // Recarrega a tela instantaneamente
+        }
+    }
+
+    fun deleteRevenue(revenueId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            CoreBridge.deleteRevenueById(revenueId)
+            loadData() // Recarrega a tela instantaneamente
         }
     }
 
@@ -189,12 +211,24 @@ class SummaryViewModel : ViewModel() {
                 val expensesList = if (mainParts.size > 1 && mainParts[1].isNotBlank()) {
                     mainParts[1].split("#").filter { it.isNotBlank() }.mapNotNull { expStr ->
                         val expParts = expStr.split(";")
-                        // AGORA SIM: Lê Valor, Categoria e payId
-                        if (expParts.size >= 3) {
-                            ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt(), expParts[2].toInt())
-                        } else if (expParts.size >= 2) {
-                            // Segurança: Se for um dado antigo sem payId, assume que é 1 (Pix/Dinheiro)
-                            ExpenseSimpleUI(expParts[0].toLong(), expParts[1].toInt(), 1)
+
+                        if (expParts.size >= 4) {
+                            // Cenário Ideal: C++ mandou as 4 informações (id;amount;catId;payId)
+                            ExpenseSimpleUI(
+                                id = expParts[0].toInt(),
+                                amountCents = expParts[1].toLong(),
+                                categoryId = expParts[2].toInt(),
+                                payId = expParts[3].toInt()
+                            )
+                        } else if (expParts.size == 3) {
+                            // Fallback de Segurança: C++ mandou só 3 informações (id;amount;catId)
+                            // Colocamos payId = 1 para a lista expansível não quebrar!
+                            ExpenseSimpleUI(
+                                id = expParts[0].toInt(),
+                                amountCents = expParts[1].toLong(),
+                                categoryId = expParts[2].toInt(),
+                                payId = 1
+                            )
                         } else null
                     }
                 } else emptyList()
@@ -209,7 +243,6 @@ class SummaryViewModel : ViewModel() {
             } catch (e: Exception) { null }
         }
     }
-
     private fun parseSimpleList(raw: String): List<SimpleItem> {
         if (raw.isEmpty()) return emptyList()
         return raw.split("\n").filter { it.isNotBlank() }.mapNotNull {
