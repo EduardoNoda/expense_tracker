@@ -9,8 +9,6 @@ Revenue::Revenue(std::string name, Money amount, Date date)
 std::string Revenue::getName() const { return name; }
 
 void Revenue::setId(int id) {
-    if (id <= 0)
-        throw new std::invalid_argument("Id deve ser positivo\n");
     this->id = id;
 }
 
