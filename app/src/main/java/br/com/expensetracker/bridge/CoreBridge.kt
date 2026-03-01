@@ -21,6 +21,8 @@ object CoreBridge {
     )
     external fun deleteExpenseById(expenseId: Int)
     external fun deleteRevenueById(revenueId: Int)
+    @JvmStatic
+    external fun payCreditCardBill(month: Int, year: Int, revenueId: Int)
     external fun getAllCategories(): String
     external fun getPaymentMethods(): String
     external fun addPaymentMethod(name: String, closingDay: Int, dueDay: Int)

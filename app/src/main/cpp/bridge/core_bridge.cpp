@@ -74,7 +74,7 @@ static void ensureSchema(Database& db) {
     db.exec(R"(
     CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        revenue_id INTEGER NOT NULL,
+        revenue_id INTEGER,
         amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
         date TEXT NOT NULL,
         impact_date TEXT NOT NULL,
@@ -295,25 +295,49 @@ Java_br_com_expensetracker_bridge_CoreBridge_getRevenuesForMonth(JNIEnv *env, jo
         Month m = summaryUseCase->execute(month, year);
         std::basic_stringstream<char> ss;
 
+        // 1. DADOS DAS RECEITAS NORMAIS (O Salário e seus gastos)
         for (const auto &r: m.getRevenues()) {
-            // 1. Dados da Receita
             ss << r.getId() << ";"
                << r.getAmount().getCents() << ";"
                << r.getDate().toISO() << ";"
-               << r.getName() << "|"; // Pipe separador
+               << r.getName() << "|";
 
-            // 2. Dados das Despesas (Isso estava faltando no seu código enviado)
-            // 2. Dados das Despesas (Agora enviando Valor, Categoria E Forma de Pagamento)
             for (const auto &e : r.getExpenses()) {
                 ss << e.getId() << ";"
                    << e.getAmount().getCents() << ";"
                    << e.getCategoryId() << ";"
-                   << e.getPaymentMethodId() << "#";
+                   << e.getPaymentMethodId() << ";"
+                   << e.getDate().toISO() << "#";
             }
-
             ss << "\n";
         }
+
+        // 2. A MÁGICA DA FATURA DO CARTÃO DIRETO NA STRING
+        bool hasOrphans = false;
+        for (const auto &e : m.getExpenses()) {
+            if (e.getRevenueId() <= 0) {
+                if (!hasOrphans) {
+                    // Cria o cabeçalho da Fatura Fake (ID=0, Amount=0, Data=Dia 1 do Mês, Nome=Fatura do Cartao)
+                    char dateBuf[12];
+                    snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-01", year, month);
+                    ss << "0;0;" << dateBuf << ";Fatura do Cartao|";
+                    hasOrphans = true;
+                }
+                // Adiciona os gastos do cartão debaixo desse cabeçalho
+                ss << e.getId() << ";"
+                   << e.getAmount().getCents() << ";"
+                   << e.getCategoryId() << ";"
+                   << e.getPaymentMethodId() << ";"
+                   << e.getDate().toISO() << "#";
+            }
+        }
+
+        if (hasOrphans) {
+            ss << "\n";
+        }
+
         return env->NewStringUTF(ss.str().c_str());
+
     } catch (const std::exception& e) {
         LOGI("Error listing revenues: %s", e.what());
         return env->NewStringUTF("");
@@ -409,4 +433,13 @@ Java_br_com_expensetracker_bridge_CoreBridge_deleteRevenueById(JNIEnv *env, jobj
 
     int id = static_cast<int>(revenue_id);
     revenueRepository->deleteById(id);
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_payCreditCardBill(JNIEnv *env, jclass clazz,
+                                                               jint month, jint year,
+                                                               jint revenue_id) {
+    if (expenseRepository != nullptr) {
+        expenseRepository->payCreditCardBill(month, year, revenue_id);
+    }
 }
