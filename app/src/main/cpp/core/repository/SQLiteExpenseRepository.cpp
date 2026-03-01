@@ -28,22 +28,23 @@ int SQLiteExpenseRepository::save(int revenueId, const Expense& expense) {
 std::vector<Expense> SQLiteExpenseRepository::findByRevenue(int revenueId) {
     std::vector<Expense> expenses;
 
-    const char* sql = "SELECT revenue_id, amount_cents, date, impact_date, category_id, payment_method_id "
+    const char* sql = "SELECT id, revenue_id, amount_cents, date, impact_date, category_id, payment_method_id "
                         "FROM expenses "
                         "WHERE revenue_id = ?;";
-                
+
     sqlite3_stmt* stmt;
     sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
     sqlite3_bind_int(stmt, 1, revenueId);
 
     while(sqlite3_step(stmt) == SQLITE_ROW) {
+        int id = sqlite3_column_int(stmt, 0);
         long long amountCents = sqlite3_column_int64(stmt, 1);
         std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt,2));
         std::string impactDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt,3));
         int categoryId = sqlite3_column_int(stmt,4);
         int paymentMethodId = sqlite3_column_int(stmt,5);
-        
-        Expense expense (revenueId, Money(amountCents), Date::fromISO(dateISO), Date::fromISO(impactDate),categoryId, paymentMethodId);
+
+        Expense expense (id, revenueId, Money(amountCents), Date::fromISO(dateISO), Date::fromISO(impactDate),categoryId, paymentMethodId);
 
         expenses.push_back(expense);
     }
@@ -54,7 +55,7 @@ std::vector<Expense> SQLiteExpenseRepository::findByRevenue(int revenueId) {
 std::vector<Expense> SQLiteExpenseRepository::findByImpactMonth(int month, int year) {
     std::vector<Expense> expenses;
 
-    const char* sql = "SELECT revenue_id, amount_cents, date, impact_date, category_id, payment_method_id "
+    const char* sql = "SELECT id, revenue_id, amount_cents, date, impact_date, category_id, payment_method_id "
                       "FROM expenses "
                       "WHERE impact_date >= ? "
                       "AND impact_date < ?;";
@@ -68,19 +69,31 @@ std::vector<Expense> SQLiteExpenseRepository::findByImpactMonth(int month, int y
     sqlite3_bind_text(stmt, 2, end.c_str(), -1, SQLITE_TRANSIENT);
 
     while(sqlite3_step(stmt) == SQLITE_ROW) {
-        int revenueId = sqlite3_column_int(stmt, 0);
-        long long amountCents = sqlite3_column_int64(stmt, 1);
-        std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-        std::string impactDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-        int categoryId = sqlite3_column_int(stmt, 4);
-        int paymentMethodId = sqlite3_column_int(stmt, 5);
+        int id = sqlite3_column_int(stmt, 0);
+        int revenueId = sqlite3_column_int(stmt, 1);
+        long long amountCents = sqlite3_column_int64(stmt, 2);
+        std::string dateISO = reinterpret_cast<const char*>(sqlite3_column_text(stmt,3));
+        std::string impactDate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        int categoryId = sqlite3_column_int(stmt, 5);
+        int paymentMethodId = sqlite3_column_int(stmt, 6);
 
-        Expense expense (revenueId, Money(amountCents), Date::fromISO(dateISO), Date::fromISO(impactDate),categoryId, paymentMethodId);
+        Expense expense (id, revenueId, Money(amountCents), Date::fromISO(dateISO), Date::fromISO(impactDate),categoryId, paymentMethodId);
 
         expenses.push_back(expense);
     }
     sqlite3_finalize(stmt);
     return expenses;
+}
+void SQLiteExpenseRepository::deleteById(int expenseId) {
+    const char* sql = "DELETE FROM expenses WHERE id = ?;";
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
+
+    sqlite3_bind_int(stmt, 1, expenseId);
+
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
 }
 void SQLiteExpenseRepository::beginTransaction() {
     database.beginTransaction();

@@ -9,6 +9,7 @@ public:
     explicit SQLiteRevenueRepository(Database& db);
 
     int save(const Revenue& revenue) override;
+    void deleteById(int revenueId) override;
     std::vector<Revenue> findByMonth(int month, int year) override;
     Revenue findById(int revenueId) override;
 private:
