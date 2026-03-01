@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.com.expensetracker.bridge.CoreBridge
+import br.com.expensetracker.ui.TempExpenseData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +17,8 @@ data class ExpenseSimpleUI(
     val id: Int,
     val amountCents: Long,
     val categoryId: Int,
-    val payId: Int
+    val payId: Int,
+    val date: String
 )
 
 data class RevenueUI(
@@ -47,7 +49,12 @@ data class HomeUiState(
     val showNoRevenueWarning: Boolean = false,
 
     val showSummaryTimeline: Boolean = false,
-    val timelineFilter: TimelineFilter = TimelineFilter.TODOS
+    val timelineFilter: TimelineFilter = TimelineFilter.TODOS,
+    val pendingOverspendExpense: TempExpenseData? = null,
+
+    val showPayFaturaDialog: Boolean = false,
+    val revenueToDelete: RevenueUI? = null,
+    val expenseToDelete: Int? = null
 )
 
 class SummaryViewModel : ViewModel() {
@@ -64,6 +71,36 @@ class SummaryViewModel : ViewModel() {
     fun openSummaryTimeline() { _uiState.update { it.copy(showSummaryTimeline = true) } }
     fun closeSummaryTimeline() { _uiState.update { it.copy(showSummaryTimeline = false, timelineFilter = TimelineFilter.TODOS) } }
     fun setTimelineFilter(filter: TimelineFilter) { _uiState.update { it.copy(timelineFilter = filter) } }
+
+    fun openPayFaturaDialog() { _uiState.update { it.copy(showPayFaturaDialog = true) } }
+    fun closePayFaturaDialog() { _uiState.update { it.copy(showPayFaturaDialog = false) } }
+
+    fun payFatura(targetRevenueId: Int) {
+        val currentMonth = _uiState.value.currentMonth
+        val currentYear = _uiState.value.currentYear
+
+        // Manda o C++ transferir os gastos para a Receita escolhida
+        br.com.expensetracker.bridge.CoreBridge.payCreditCardBill(currentMonth, currentYear, targetRevenueId)
+
+        closePayFaturaDialog()
+        loadData() // <-- CORRIGIDO AQUI! Usamos a sua função loadData() para atualizar a tela!
+    }
+    // --- CONTROLES DE EXCLUSÃO ---
+    fun promptDeleteRevenue(revenue: RevenueUI) {
+        _uiState.update { it.copy(revenueToDelete = revenue) }
+    }
+
+    fun dismissDeleteRevenue() {
+        _uiState.update { it.copy(revenueToDelete = null) }
+    }
+
+    fun promptDeleteExpense(expenseId: Int) {
+        _uiState.update { it.copy(expenseToDelete = expenseId) }
+    }
+
+    fun dismissDeleteExpense() {
+        _uiState.update { it.copy(expenseToDelete = null) }
+    }
     private fun loadAuxiliaryData() {
         viewModelScope.launch(Dispatchers.IO) {
             val catsRaw = CoreBridge.getAllCategories()
@@ -116,6 +153,7 @@ class SummaryViewModel : ViewModel() {
             CoreBridge.deleteExpenseById(expenseId)
             loadData() // Recarrega a tela instantaneamente
         }
+        dismissDeleteExpense() // Fecha o popup
     }
 
     fun deleteRevenue(revenueId: Int) {
@@ -123,6 +161,7 @@ class SummaryViewModel : ViewModel() {
             CoreBridge.deleteRevenueById(revenueId)
             loadData() // Recarrega a tela instantaneamente
         }
+        dismissDeleteRevenue() // Fecha o popup
     }
 
     // --- NOVA LÓGICA DO BOTÃO DE GASTO ---
@@ -203,6 +242,9 @@ class SummaryViewModel : ViewModel() {
 
     // ... (Parsers continuam iguais)
     private fun parseRevenues(raw: String): List<RevenueUI> {
+        // ESPIÃO DO LOGCAT: Vai imprimir a string bruta no painel!
+        Log.e("JNI_DEBUG", "C++ Mandou: $raw")
+
         if (raw.isEmpty()) return emptyList()
         return raw.split("\n").filter { it.isNotBlank() }.mapNotNull { line ->
             try {
@@ -212,22 +254,21 @@ class SummaryViewModel : ViewModel() {
                     mainParts[1].split("#").filter { it.isNotBlank() }.mapNotNull { expStr ->
                         val expParts = expStr.split(";")
 
-                        if (expParts.size >= 4) {
-                            // Cenário Ideal: C++ mandou as 4 informações (id;amount;catId;payId)
+                        if (expParts.size >= 5) {
                             ExpenseSimpleUI(
                                 id = expParts[0].toInt(),
                                 amountCents = expParts[1].toLong(),
                                 categoryId = expParts[2].toInt(),
-                                payId = expParts[3].toInt()
+                                payId = expParts[3].toInt(),
+                                date = expParts[4].trim()
                             )
-                        } else if (expParts.size == 3) {
-                            // Fallback de Segurança: C++ mandou só 3 informações (id;amount;catId)
-                            // Colocamos payId = 1 para a lista expansível não quebrar!
+                        } else if (expParts.size >= 4) {
                             ExpenseSimpleUI(
                                 id = expParts[0].toInt(),
                                 amountCents = expParts[1].toLong(),
                                 categoryId = expParts[2].toInt(),
-                                payId = 1
+                                payId = expParts[3].toInt(),
+                                date = "2026-01-01"
                             )
                         } else null
                     }
@@ -240,7 +281,11 @@ class SummaryViewModel : ViewModel() {
                     name = if(revenuePart.size > 3) revenuePart[3] else "Sem Nome",
                     expenses = expensesList
                 )
-            } catch (e: Exception) { null }
+            } catch (e: Exception) {
+                // SE DER ERRO NA LINHA, O LOGCAT VAI DEDURAR O MOTIVO!
+                Log.e("JNI_DEBUG", "Erro ao processar linha: $line. Motivo: ${e.message}")
+                null
+            }
         }
     }
     private fun parseSimpleList(raw: String): List<SimpleItem> {
@@ -251,5 +296,35 @@ class SummaryViewModel : ViewModel() {
                 SimpleItem(p[0].toInt(), p[1])
             } catch (e: Exception) { null }
         }
+    }
+    fun tryAddExpense(revId: Int, amountCents: Long, catId: Int, payId: Int, installments: Int) {
+        if (payId > 1) {
+            // A MÁGICA ACONTECE AQUI!
+            // É A_PRAZO (Cartão). Não descontamos de nenhuma receita agora.
+            // Mandamos '0' como Receita para o C++ salvar como NULL (Gasto flutuante)
+            confirmAddExpense(0, amountCents, catId, payId, installments)
+            return // Sai da função, não precisa checar saldo!
+        }
+
+        // Se chegou aqui, é A_VISTA (payId == 1). Faz a checagem de saldo normal:
+        val targetRev = _uiState.value.revenues.find { it.id == revId }
+        if (targetRev != null) {
+            val totalSpent = targetRev.expenses.sumOf { it.amountCents }
+            val remaining = targetRev.amountCents - totalSpent
+
+            if (amountCents > remaining) {
+                // Estourou o limite da receita! Abre o alerta.
+                _uiState.update {
+                    it.copy(pendingOverspendExpense = TempExpenseData(revId, amountCents, catId, payId, installments))
+                }
+            } else {
+                // Tem saldo suficiente, salva direto.
+                confirmAddExpense(revId, amountCents, catId, payId, installments)
+            }
+        }
+    }
+
+    fun dismissOverspendWarning() {
+        _uiState.update { it.copy(pendingOverspendExpense = null) }
     }
 }
