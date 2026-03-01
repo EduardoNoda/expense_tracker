@@ -11,6 +11,7 @@ public:
     std::vector<Expense> findByRevenue(int revenueId) override;
     std::vector<Expense> findByImpactMonth(int month, int year) override;
     void deleteById(int expenseId) override;
+    void payCreditCardBill(int month, int year, int targetRevenueId) override;    // No SQLiteExpenseRepository.h
     void beginTransaction() override;
     void commitTransaction() override;
 private:
