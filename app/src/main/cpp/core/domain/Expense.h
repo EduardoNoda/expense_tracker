@@ -13,7 +13,17 @@ public:
         int categoryId,
         int paymentMethodId
     );
+    Expense(
+        int dbId,
+        int revenueId,
+        Money amount,
+        Date date,
+        Date impactDate,
+        int categoryId,
+        int paymentMethodId
+    );
 
+    const int& getId() const;
     const int& getRevenueId() const;
     const Money& getAmount() const;
     const Date& getDate() const;
@@ -23,6 +33,7 @@ public:
     int getPaymentMethodId() const;
 
 private:
+    int id;
     int revenueId;
     Money amount;
     Date date;
