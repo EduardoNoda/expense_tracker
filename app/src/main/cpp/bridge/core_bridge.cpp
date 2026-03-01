@@ -185,15 +185,7 @@ static void ensureSchema(Database& db) {
     )");
 
     db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (1, 'Pix', 'IMMEDIATE')
-    )");
-
-    db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (2, 'Dinheiro', 'IMMEDIATE')
-    )");
-
-    db.exec(R"(
-    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (3, 'Débito', 'IMMEDIATE')
+    INSERT OR IGNORE INTO payment_methods(id, name, type) VALUES (1, 'À Vista', 'IMMEDIATE')
     )");
 
 
@@ -313,7 +305,8 @@ Java_br_com_expensetracker_bridge_CoreBridge_getRevenuesForMonth(JNIEnv *env, jo
             // 2. Dados das Despesas (Isso estava faltando no seu código enviado)
             // 2. Dados das Despesas (Agora enviando Valor, Categoria E Forma de Pagamento)
             for (const auto &e : r.getExpenses()) {
-                ss << e.getAmount().getCents() << ";"
+                ss << e.getId() << ";"
+                   << e.getAmount().getCents() << ";"
                    << e.getCategoryId() << ";"
                    << e.getPaymentMethodId() << "#";
             }
@@ -398,4 +391,22 @@ Java_br_com_expensetracker_bridge_CoreBridge_addPaymentMethod(JNIEnv *env, jobje
         LOGI("Error adding card: %s", e.what());
     }
     env->ReleaseStringUTFChars(name, nameCStr);
+}
+extern "C"
+JNIEXPORT void JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_deleteExpenseById(JNIEnv *env, jobject thiz,
+                                                               jint expense_id) {
+    if(expenseRepository == nullptr) return;
+    int id = static_cast<int>(expense_id);
+    expenseRepository->deleteById(id);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_deleteRevenueById(JNIEnv *env, jobject thiz,
+                                                               jint revenue_id) {
+    if(revenueRepository == nullptr) return;
+
+    int id = static_cast<int>(revenue_id);
+    revenueRepository->deleteById(id);
 }
