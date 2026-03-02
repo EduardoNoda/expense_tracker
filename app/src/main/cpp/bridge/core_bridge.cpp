@@ -443,3 +443,14 @@ Java_br_com_expensetracker_bridge_CoreBridge_payCreditCardBill(JNIEnv *env, jcla
         expenseRepository->payCreditCardBill(month, year, revenue_id);
     }
 }
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_br_com_expensetracker_bridge_CoreBridge_checkDueInvoices(JNIEnv *env, jclass clazz,
+                                                             jint day, jint month,
+                                                             jint year) {
+    if (expenseRepository != nullptr) {
+        std::string result = expenseRepository->checkDueInvoices(day, month, year);
+        return env->NewStringUTF(result.c_str());
+    }
+    return env->NewStringUTF("");
+}
