@@ -11,7 +11,8 @@ public:
     virtual std::vector<Expense> findByRevenue(int revenueId) = 0;
     virtual std::vector<Expense> findByImpactMonth(int month, int year) = 0;
     virtual void deleteById(int expenseId) = 0;
-    virtual void payCreditCardBill(int month, int year, int targetRevenueId) = 0; // No ExpenseRepository.h
+    virtual void payCreditCardBill(int month, int year, int targetRevenueId) = 0;
+    virtual std::string checkDueInvoices(int todayDay, int todayMonth, int todayYear) = 0;
     virtual void beginTransaction() = 0;
     virtual void commitTransaction() = 0;
 };

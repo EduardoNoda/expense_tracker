@@ -119,6 +119,55 @@ void SQLiteExpenseRepository::payCreditCardBill(int month, int year, int targetR
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 }
+
+std::string SQLiteExpenseRepository::checkDueInvoices(int todayDay, int todayMonth, int todayYear) {
+    const char* sql = R"(
+        SELECT e.amount_cents, e.impact_date, p.due_day
+        FROM expenses e
+        INNER JOIN payment_methods p ON e.payment_method_id = p.id
+        WHERE e.revenue_id IS NULL AND p.type = 'A_PRAZO';
+    )";
+
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(database.get(), sql, -1, &stmt, nullptr);
+
+    long long totalDue = 0;
+    int maxDueDay = 1;
+    int dueMonth = todayMonth;
+    int dueYear = todayYear;
+
+    while(sqlite3_step(stmt) == SQLITE_ROW) {
+        long long amount = sqlite3_column_int(stmt, 0);
+        std::string impactDateStr = reinterpret_cast<const char*>(sqlite3_column_int(stmt, 1));
+        int dueDay = sqlite3_column_int(stmt, 2);
+
+        Date impactDate = Date::fromISO(impactDateStr);
+
+        // A Lógica do Lazy Evaluator: Passou do vencimento?
+        bool isOverdue = false;
+        if (todayYear > impactDate.getYear()) isOverdue = true;
+        else if (todayYear == impactDate.getYear() && todayMonth > impactDate.getMonth()) isOverdue = true;
+        else if (todayYear == impactDate.getYear() && todayMonth == impactDate.getMonth() && todayDay >= dueDay) isOverdue = true;
+
+        if (isOverdue) {
+            totalDue += amount; // Soma tudo que está atrasado
+            if (dueDay > maxDueDay) { // Pega a data mais distante para mostrar no aviso
+                maxDueDay = dueDay;
+                dueMonth = impactDate.getMonth();
+                dueYear = impactDate.getYear();
+            }
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (totalDue > 0) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "%lld;%02d/%02d/%04d", totalDue, maxDueDay, dueMonth, dueYear);
+        return std::string(buf);
+    }
+    return "";
+}
+
 void SQLiteExpenseRepository::beginTransaction() {
     database.beginTransaction();
 }
