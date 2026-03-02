@@ -54,7 +54,8 @@ data class HomeUiState(
 
     val showPayFaturaDialog: Boolean = false,
     val revenueToDelete: RevenueUI? = null,
-    val expenseToDelete: Int? = null
+    val expenseToDelete: Int? = null,
+    val smartPromptData: Pair<Long, String>? = null
 )
 
 class SummaryViewModel : ViewModel() {
@@ -138,15 +139,41 @@ class SummaryViewModel : ViewModel() {
             val summary = CoreBridge.getMonthSummary(m, y)
             val revRaw = CoreBridge.getRevenuesForMonth(m, y)
 
+            // 1. Lemos os dados brutos
+            val parsedRevenues = parseRevenues(revRaw)
+
+            // 2. A MÁGICA DA ORDENAÇÃO: Fatura (ID == 0) vai para o topo!
+            val faturaCard = parsedRevenues.find { it.id == 0 }
+            val salarios = parsedRevenues.filter { it.id != 0 }
+            val revenuesOrdenadas = if (faturaCard != null) listOf(faturaCard) + salarios else salarios
+
+            // 3. O INVESTIGADOR DO C++ (Lazy Evaluator)
+            val now = LocalDate.now()
+            val dueDataStr = CoreBridge.checkDueInvoices(now.dayOfMonth, now.monthValue, now.year)
+            var promptData: Pair<Long, String>? = null
+
+            if (dueDataStr.isNotBlank()) {
+                val parts = dueDataStr.split(";")
+                if (parts.size >= 2) {
+                    promptData = Pair(parts[0].toLong(), parts[1]) // Pair(Valor, Data)
+                }
+            }
+
             _uiState.update {
                 it.copy(
                     totalRevenue = summary.getOrElse(0) { 0 },
                     totalExpense = summary.getOrElse(1) { 0 },
                     balance = summary.getOrElse(2) { 0 },
-                    revenues = parseRevenues(revRaw)
+                    revenues = revenuesOrdenadas, // <-- Usamos a lista ordenada aqui!
+                    smartPromptData = promptData  // <-- Dispara o lembrete!
                 )
             }
         }
+    }
+
+    // Não se esqueça de adicionar a função para dispensar o aviso:
+    fun dismissSmartPrompt() {
+        _uiState.update { it.copy(smartPromptData = null) }
     }
     fun deleteExpense(expenseId: Int) {
         viewModelScope.launch(Dispatchers.IO) {

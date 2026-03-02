@@ -75,6 +75,45 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
     val scope = rememberCoroutineScope()
     var showAddCardDialog by remember { mutableStateOf(false) }
 
+    // --- O SMART PROMPT (LEMBRETE DE FATURA VENCIDA) ---
+    if (state.smartPromptData != null) {
+        val amount = state.smartPromptData!!.first
+        val dateStr = state.smartPromptData!!.second
+        val temReceitaPraPagar = state.revenues.any { it.id != 0 } // Verifica se tem salário cadastrado
+
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSmartPrompt() },
+            title = { Text("Fatura Vencida ⚠️", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "A fatura de ${MoneyFormatter.format(amount)} venceu no dia $dateStr.\n\nDeseja realizar o pagamento agora?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.dismissSmartPrompt() // Esconde o aviso
+                        if (temReceitaPraPagar) {
+                            // Se tem dinheiro/salário, abre o menu de pagar
+                            viewModel.openPayFaturaDialog()
+                        } else {
+                            // Se NÃO tem salário, já abre o formulário de Nova Receita pra poupar tempo!
+                            viewModel.openAddRevenueDialog()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (temReceitaPraPagar) "Pagar Fatura" else "Adicionar Receita")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissSmartPrompt() }) {
+                    Text("Lembrar Depois", color = Color.Gray)
+                }
+            }
+        )
+    }
     // POPUP EXCLUIR RECEITA
     if (state.revenueToDelete != null) {
         AlertDialog(
