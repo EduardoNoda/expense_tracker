@@ -73,6 +73,7 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
     val revenueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val expenseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() } // <-- ADICIONE ISTO
     var showAddCardDialog by remember { mutableStateOf(false) }
 
     // --- O SMART PROMPT (LEMBRETE DE FATURA VENCIDA) ---
@@ -322,6 +323,20 @@ fun ExpenseTrackerApp(viewModel: SummaryViewModel) {
                     viewModel.nextMonth()
                 }
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+            // GATILHO DO SNACKBAR
+            LaunchedEffect(state.feedbackMessage) {
+                state.feedbackMessage?.let { mensagem ->
+                    snackbarHostState.showSnackbar(
+                        message = mensagem,
+                        duration = SnackbarDuration.Short
+                    )
+                    // Depois que o tempo do Snackbar acaba, limpa a mensagem no ViewModel
+                    viewModel.clearFeedbackMessage()
+                }
+            }
         },
         floatingActionButton = {
             // ... (SEU CÓDIGO DO FLOATING ACTION BUTTON CONTINUA EXATAMENTE IGUAL AQUI) ...
@@ -736,6 +751,14 @@ fun RevenueCard(
     val totalSpent = revenue.expenses.sumOf { it.amountCents }
     val remaining = revenue.amountCents - totalSpent
 
+    // LÓGICA DE INVERSÃO DA DATA
+    val displayDate = try {
+        val partes = revenue.date.split("-")
+        if (partes.size == 3) "${partes[2]}/${partes[1]}/${partes[0]}" else revenue.date
+    } catch (e: Exception) {
+        revenue.date
+    }
+
     val scale = if (isSelectingMode) {
         val infiniteTransition = rememberInfiniteTransition(label = "pulse_transition")
         infiniteTransition.animateFloat(
@@ -763,7 +786,7 @@ fun RevenueCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(revenue.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     if (revenue.id != 0) { // Fatura não tem "Recebido"
-                        Text("Recebido: ${revenue.date}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Recebido: ${displayDate}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                 }
 
@@ -836,13 +859,12 @@ fun RevenueCard(
                 AnimatedVisibility(visible = isExpanded) {
                     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
 
-                        // 1. SEPARA OS DADOS EM DOIS BALDES
-                        val aVista = revenue.expenses.filter { it.payId == 1 } // Ou <= 1 na sua lógica
+                        val aVista = revenue.expenses.filter { it.payId == 1 }
                         val aPrazo = revenue.expenses.filter { it.payId > 1 }
 
-                        // 2. DESENHA O BLOCO "À VISTA"
+                        // BLOCO 1: À VISTA (PIX / DÉBITO)
                         if (aVista.isNotEmpty()) {
-                            Text("À Vista (Débito/Pix)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text("À Vista", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.height(4.dp))
 
                             aVista.forEach { expense ->
@@ -852,7 +874,7 @@ fun RevenueCard(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("- $catName", style = MaterialTheme.typography.bodyMedium)
+                                    Text("• $catName", style = MaterialTheme.typography.bodyMedium)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                                         if (!isSelectingMode) {
@@ -866,33 +888,44 @@ fun RevenueCard(
                             Spacer(modifier = Modifier.height(12.dp))
                         }
 
-                        // 3. DESENHA O BLOCO "A PRAZO" (Se a fatura foi paga com essa receita)
+                        // BLOCO 2: CARTÕES DE CRÉDITO AGRUPADOS
                         if (aPrazo.isNotEmpty()) {
-                            Text("Cartão de Crédito (Pagos)", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Cartões de Crédito", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                            aPrazo.forEach { expense ->
-                                val catName = categories.find { it.id == expense.categoryId }?.name ?: "Outros"
-                                val payName = paymentMethods.find { it.id == expense.payId }?.name ?: "Cartão"
+                            // A MÁGICA: Agrupa a lista de gastos pelo ID do Cartão
+                            val gastosPorCartao = aPrazo.groupBy { it.payId }
 
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text("- $catName", style = MaterialTheme.typography.bodyMedium)
-                                        Text(payName, style = MaterialTheme.typography.labelSmall, color = Color.Gray) // Mostra de qual cartão era
-                                    }
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                        if (!isSelectingMode) {
-                                            IconButton(onClick = { onDeleteExpense(expense.id) }, modifier = Modifier.size(24.dp).padding(start = 4.dp)) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Excluir", tint = Color.LightGray)
+                            gastosPorCartao.forEach { (payId, listaDeGastos) ->
+                                val payName = paymentMethods.find { it.id == payId }?.name ?: "Cartão"
+
+                                // CABEÇALHO DO CARTÃO (Ex: Nubank)
+                                Text(payName, style = MaterialTheme.typography.labelSmall, color = Color.DarkGray, fontWeight = FontWeight.Bold)
+
+                                // LISTA DE COMPRAS DESSE CARTÃO (com um recuo para dar ideia de hierarquia)
+                                listaDeGastos.forEach { expense ->
+                                    val catName = categories.find { it.id == expense.categoryId }?.name ?: "Outros"
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth()
+                                            .padding(vertical = 2.dp)
+                                            .padding(start = 12.dp), // Recuo na margem esquerda
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("- $catName", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(MoneyFormatter.format(expense.amountCents), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                            if (!isSelectingMode) {
+                                                IconButton(onClick = { onDeleteExpense(expense.id) }, modifier = Modifier.size(24.dp).padding(start = 4.dp)) {
+                                                    Icon(Icons.Default.Delete, contentDescription = "Excluir", tint = Color.LightGray)
+                                                }
                                             }
                                         }
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(8.dp)) // Espaço entre um cartão e outro
                             }
                         }
                     }

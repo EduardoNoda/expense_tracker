@@ -55,7 +55,9 @@ data class HomeUiState(
     val showPayFaturaDialog: Boolean = false,
     val revenueToDelete: RevenueUI? = null,
     val expenseToDelete: Int? = null,
-    val smartPromptData: Pair<Long, String>? = null
+    val smartPromptData: Pair<Long, String>? = null,
+    // --- NOVO: MENSAGEM DE FEEDBACK ---
+    val feedbackMessage: String? = null
 )
 
 class SummaryViewModel : ViewModel() {
@@ -217,7 +219,9 @@ class SummaryViewModel : ViewModel() {
     fun cancelRevenueSelection() {
         _uiState.update { it.copy(isSelectingRevenueMode = false) }
     }
-
+    fun clearFeedbackMessage() {
+        _uiState.update { it.copy(feedbackMessage = null) }
+    }
     // --- MANIPULAÇÃO DE DIALOGS E DADOS ---
     fun openAddRevenueDialog() { _uiState.update { it.copy(isAddingRevenue = true) } }
     fun closeAddRevenueDialog() { _uiState.update { it.copy(isAddingRevenue = false) } }
@@ -254,10 +258,26 @@ class SummaryViewModel : ViewModel() {
         val now = LocalDate.now()
 
         viewModelScope.launch(Dispatchers.IO) {
-            CoreBridge.addExpenseToRevenue(revId, amountCents, now.dayOfMonth, targetMonth, targetYear, catId, payId, installments)
-            loadData()
+            // O Kotlin agora RECEBE o mês de impacto exato do C++
+            val impactMonth = CoreBridge.addExpenseToRevenue(
+                revId, amountCents, now.dayOfMonth, targetMonth, targetYear, catId, payId, installments
+            )
+
+            val mensagem = if (payId > 1) {
+                // A COMPARAÇÃO DE IMPACTO AQUI!
+                if (impactMonth == targetMonth) {
+                    "Lançado na fatura deste mês!"
+                } else {
+                    "Lançado na fatura do próximo mês!"
+                }
+            } else {
+                "Gasto adicionado com sucesso!"
+            }
+
+            _uiState.update { it.copy(feedbackMessage = mensagem) }
+
+            loadData() // Recarrega a tela com os dados novos
         }
-        // REMOVIDO: closeAddExpenseDialog() - A UI fará isso suavemente agora
     }
 
     fun addNewCard(name: String, closingDay: Int, dueDay: Int) {
