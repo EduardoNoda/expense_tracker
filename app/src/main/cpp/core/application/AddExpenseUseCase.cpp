@@ -37,6 +37,7 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, Date initi
     long long totalCents = money.getCents();
     long long installmentCents = totalCents / installments;
     Money installmentMoney(installmentCents);
+    int firstImpactMonth = date.getMonth();
 
     int lastId = 0;
 
@@ -69,6 +70,9 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, Date initi
             Date targetMonthDate = addMonths(currentInstallmentDate, monthOffset);
             finalImpactDate = Date(dueDay, targetMonthDate.getMonth(), targetMonthDate.getYear());
         }
+        if (i == 0) {
+            firstImpactMonth = finalImpactDate.getMonth();
+        }
 
         Expense expense(revenueId, installmentMoney, currentInstallmentDate, finalImpactDate, categoryId, paymentMethodId);
         lastId = expenseRepository.save(revenueId, expense);
@@ -79,5 +83,5 @@ int AddExpenseUseCase::execute(int revenueId, Money money, Date date, Date initi
     }
     expenseRepository.commitTransaction();
 
-    return lastId;
+    return firstImpactMonth;
 }
