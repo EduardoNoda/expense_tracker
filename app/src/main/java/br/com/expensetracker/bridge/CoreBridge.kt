@@ -18,7 +18,7 @@ object CoreBridge {
         categoryId: Int,
         paymentMethodId: Int,
         installments: Int
-    )
+    ): Int
     external fun deleteExpenseById(expenseId: Int)
     external fun deleteRevenueById(revenueId: Int)
     @JvmStatic

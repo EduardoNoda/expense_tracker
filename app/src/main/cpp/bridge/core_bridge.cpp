@@ -369,7 +369,7 @@ Java_br_com_expensetracker_bridge_CoreBridge_getPaymentMethods(JNIEnv *env, jobj
 // ... includes ...
 
 extern "C"
-JNIEXPORT void JNICALL
+JNIEXPORT jint JNICALL
 Java_br_com_expensetracker_bridge_CoreBridge_addExpenseToRevenue(JNIEnv *env, jobject thiz,
                                                                  jint revenue_id,
                                                                  jlong amount,
@@ -378,14 +378,14 @@ Java_br_com_expensetracker_bridge_CoreBridge_addExpenseToRevenue(JNIEnv *env, jo
                                                                  jint paymentMethodId,
                                                                  jint installments // <--- NOVO
 ) {
-    if(addExpenseUseCase == nullptr) return;
+    if(addExpenseUseCase == nullptr) return -1;
 
     try {
         Money money(amount);
         Date date(day, month, year);
         Date impactDate = date;
 
-        addExpenseUseCase->execute(
+        int impactMonth = addExpenseUseCase->execute(
                 revenue_id,
                 money,
                 date,
@@ -394,7 +394,9 @@ Java_br_com_expensetracker_bridge_CoreBridge_addExpenseToRevenue(JNIEnv *env, jo
                 paymentMethodId,
                 installments // <--- Passando pro Core
         );
+        return impactMonth;
     } catch (const std::exception& e){
+        return month;
         LOGI("Error adding expense: %s", e.what());
     }
 }
