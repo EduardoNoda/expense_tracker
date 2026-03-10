@@ -57,7 +57,12 @@ data class HomeUiState(
     val expenseToDelete: Int? = null,
     val smartPromptData: Pair<Long, String>? = null,
     // --- NOVO: MENSAGEM DE FEEDBACK ---
-    val feedbackMessage: String? = null
+    val feedbackMessage: String? = null,
+
+    val isFaturaSectionExpanded: Boolean = true,
+    val isRevenueSectionExpanded: Boolean = true,
+    val showPaymentTypeDialog: Boolean = false,
+    val preSelectedPayId: Int? = null
 )
 
 class SummaryViewModel : ViewModel() {
@@ -172,6 +177,49 @@ class SummaryViewModel : ViewModel() {
             }
         }
     }
+    // --- FUNÇÕES DE SEÇÃO RESTAURADAS ---
+    fun toggleFaturaSection() { _uiState.update { it.copy(isFaturaSectionExpanded = !it.isFaturaSectionExpanded) } }
+    fun toggleRevenueSection() { _uiState.update { it.copy(isRevenueSectionExpanded = !it.isRevenueSectionExpanded) } }
+
+    fun closePaymentTypeDialog() { _uiState.update { it.copy(showPaymentTypeDialog = false) } }
+
+    // Substitua a função onAddExpenseActionClicked por esta:
+    fun onAddExpenseActionClicked() {
+        _uiState.update { it.copy(showPaymentTypeDialog = true, showNoRevenueWarning = false) }
+    }
+
+    // Adicione a função que processa a escolha do Popup:
+    fun proceedFromPaymentType(payId: Int, isCredit: Boolean) {
+        val realRevenues = _uiState.value.revenues.filter { it.id != 0 }
+        closePaymentTypeDialog()
+
+        if (isCredit) {
+            _uiState.update {
+                it.copy(
+                    preSelectedPayId = payId,
+                    selectedRevenueIdForExpense = 0,
+                    isAddingExpense = true,
+                    isSelectingRevenueMode = false
+                )
+            }
+        } else {
+            _uiState.update { it.copy(preSelectedPayId = payId) }
+
+            if (realRevenues.isEmpty()) {
+                _uiState.update { it.copy(showNoRevenueWarning = true) }
+            } else if (realRevenues.size == 1) {
+                openAddExpenseDialog(realRevenues.first().id)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isSelectingRevenueMode = true,
+                        isFaturaSectionExpanded = false,
+                        isRevenueSectionExpanded = true // Abre as receitas sozinho!
+                    )
+                }
+            }
+        }
+    }
 
     // Não se esqueça de adicionar a função para dispensar o aviso:
     fun dismissSmartPrompt() {
@@ -191,25 +239,6 @@ class SummaryViewModel : ViewModel() {
             loadData() // Recarrega a tela instantaneamente
         }
         dismissDeleteRevenue() // Fecha o popup
-    }
-
-    // --- NOVA LÓGICA DO BOTÃO DE GASTO ---
-    fun onAddExpenseActionClicked() {
-        val currentRevenues = _uiState.value.revenues
-        when {
-            currentRevenues.isEmpty() -> {
-                // Não tem receita: Mostra aviso
-                _uiState.update { it.copy(showNoRevenueWarning = true) }
-            }
-            currentRevenues.size == 1 -> {
-                // Só tem uma: Vai direto pro formulário
-                openAddExpenseDialog(currentRevenues.first().id)
-            }
-            else -> {
-                // Tem 2 ou mais: Entra no modo de seleção
-                _uiState.update { it.copy(isSelectingRevenueMode = true) }
-            }
-        }
     }
 
     fun dismissNoRevenueWarning() {
